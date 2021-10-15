@@ -124,7 +124,7 @@ class TacotronDataset(Dataset):
                         pop_indexes.append(index)
                 except TypeError:
                     pop_indexes.append(index)
-            for pop_index in pop_indexes:
+            for pop_index in sorted(pop_indexes, reverse=True):
                 self.datapoints.pop(pop_index)
 
             # save to cache
