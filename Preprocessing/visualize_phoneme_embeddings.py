@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 from matplotlib.markers import MarkerStyle
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
+from gensim.models import KeyedVectors
 
 from ArticulatoryCombinedTextFrontend import ArticulatoryCombinedTextFrontend
 
@@ -37,17 +38,25 @@ def plot_embeddings(reduced_data, phoneme_list, title):
 
 
 if __name__ == '__main__':
-    with open("embedding_table_512dim.json", 'r', encoding="utf8") as fp:
-        datapoints = json.load(fp)
+    #with open("embedding_table_512dim.json", 'r', encoding="utf8") as fp:
+    #    datapoints = json.load(fp)
 
     key_list = list()  # no matter where you get it from, this needs to be a list of the phonemes you want to visualize as string
     embedding_list = list()  # in the same order as the phonemes in the list above, this list needs to be filled with their embedding vectors
 
-    for key in datapoints:
-        key_list.append(key)
-        embedding_list += datapoints[key]
+    word_vectors = KeyedVectors.load('Preprocessing/embedding_pretrained_phone2vec_en_384_dim.kv')
 
-    embeddings_as_array = np.array(embedding_list)
+
+    #for key in datapoints:
+    #    key_list.append(key)
+    #    embedding_list += datapoints[key]
+
+    #embeddings_as_array = np.array(embedding_list)
+
+    key_list = np.asarray(word_vectors.index_to_key)
+    embeddings_as_array = np.asarray(word_vectors.vectors)
+
+
 
     tsne = TSNE(verbose=1, learning_rate=4, perplexity=30, n_iter=200000, n_iter_without_progress=8000, init='pca')
     pca = PCA(n_components=2)

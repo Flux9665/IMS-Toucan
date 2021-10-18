@@ -12,14 +12,15 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 
-from Preprocessing.ArticulatoryCombinedTextFrontend import ArticulatoryCombinedTextFrontend
+#from Preprocessing.ArticulatoryCombinedTextFrontend import ArticulatoryCombinedTextFrontend
+from Preprocessing.Phone2VecTextFrontend import Phone2VecTextFrontend
 from TrainingInterfaces.Text_to_Spectrogram.Tacotron2.AlignmentLoss import binarize_attention_parallel
 from Utility.utils import delete_old_checkpoints
 from Utility.utils import get_most_recent_checkpoint
 
 
 def plot_attention(model, lang, device, speaker_embedding, att_dir, step, language_id):
-    tf = ArticulatoryCombinedTextFrontend(language=lang)
+    tf = Phone2VecTextFrontend(language=lang)
     sentence = ""
     if lang == "en":
         sentence = "This is a complex sentence, it even has a pause!"

@@ -42,7 +42,7 @@ def run(gpu_id, resume_checkpoint, finetune, model_dir, resume):
                                 cut_silences=False,
                                 device=device)
 
-    model = Tacotron2(initialize_from_pretrained_embedding_weights=False)
+    model = Tacotron2(idim=384, initialize_from_pretrained_embedding_weights=False)
 
     print("Training model")
     train_loop(net=model,
@@ -57,5 +57,5 @@ def run(gpu_id, resume_checkpoint, finetune, model_dir, resume):
                lr=0.001,
                path_to_checkpoint=resume_checkpoint,
                fine_tune=finetune,
-               freeze_embedding_until=None,
+               freeze_embedding_until=100000,
                resume=resume)

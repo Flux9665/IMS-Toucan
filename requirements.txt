@@ -15,6 +15,7 @@ editdistance==0.5.3
 emoji==1.4.2
 ftfy==6.0.3
 future==0.18.2
+gensim==4.1.0
 graphviz==0.17
 idna==3.2
 isodate==0.6.0
