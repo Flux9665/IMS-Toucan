@@ -112,7 +112,7 @@ class HiFiGANGenerator(torch.nn.Module):
             c = self.upsamples[i](c)
             cs = 0.0  # initialize
             for j in range(self.num_blocks):
-                cs += self.blocks[i * self.num_blocks + j](c)
+                cs = cs + self.blocks[i * self.num_blocks + j](c)
             c = cs / self.num_blocks
         c = self.output_conv(c)
 
@@ -261,17 +261,17 @@ class HiFiGANPeriodDiscriminator(torch.nn.Module):
         if t % self.period != 0:
             n_pad = self.period - (t % self.period)
             x = F.pad(x, (0, n_pad), "reflect")
-            t += n_pad
+            t = t + n_pad
         x = x.view(b, c, t // self.period, self.period)
 
         # forward conv
         outs = []
         for layer in self.convs:
             x = layer(x)
-            outs += [x]
+            outs = outs + [x]
         x = self.output_conv(x)
         x = torch.flatten(x, 1, -1)
-        outs += [x]
+        outs = outs + [x]
 
         return outs
 
@@ -303,18 +303,18 @@ class HiFiGANMultiPeriodDiscriminator(torch.nn.Module):
     def __init__(self,
                  periods=[2, 3, 5, 7, 11],
                  discriminator_params={
-                     "in_channels"                : 1,
-                     "out_channels"               : 1,
-                     "kernel_sizes"               : [5, 3],
-                     "channels"                   : 32,
-                     "downsample_scales"          : [3, 3, 3, 3, 1],
-                     "max_downsample_channels"    : 1024,
-                     "bias"                       : True,
-                     "nonlinear_activation"       : "LeakyReLU",
+                     "in_channels": 1,
+                     "out_channels": 1,
+                     "kernel_sizes": [5, 3],
+                     "channels": 32,
+                     "downsample_scales": [3, 3, 3, 3, 1],
+                     "max_downsample_channels": 1024,
+                     "bias": True,
+                     "nonlinear_activation": "LeakyReLU",
                      "nonlinear_activation_params": {"negative_slope": 0.1},
-                     "use_weight_norm"            : True,
-                     "use_spectral_norm"          : False,
-                     }, ):
+                     "use_weight_norm": True,
+                     "use_spectral_norm": False,
+                 }, ):
         """
         Initialize HiFiGANMultiPeriodDiscriminator module.
         
@@ -339,7 +339,7 @@ class HiFiGANMultiPeriodDiscriminator(torch.nn.Module):
         """
         outs = []
         for f in self.discriminators:
-            outs += [f(x)]
+            outs = outs + [f(x)]
 
         return outs
 
@@ -455,7 +455,7 @@ class HiFiGANScaleDiscriminator(torch.nn.Module):
         outs = []
         for f in self.layers:
             x = f(x)
-            outs += [x]
+            outs = outs + [x]
 
         return outs
 
@@ -490,21 +490,21 @@ class HiFiGANMultiScaleDiscriminator(torch.nn.Module):
                  # follow the official implementation setting
                  downsample_pooling_params={
                      "kernel_size": 4,
-                     "stride"     : 2,
-                     "padding"    : 2,
-                     },
+                     "stride": 2,
+                     "padding": 2,
+                 },
                  discriminator_params={
-                     "in_channels"                : 1,
-                     "out_channels"               : 1,
-                     "kernel_sizes"               : [15, 41, 5, 3],
-                     "channels"                   : 128,
-                     "max_downsample_channels"    : 1024,
-                     "max_groups"                 : 16,
-                     "bias"                       : True,
-                     "downsample_scales"          : [2, 2, 4, 4, 1],
-                     "nonlinear_activation"       : "LeakyReLU",
+                     "in_channels": 1,
+                     "out_channels": 1,
+                     "kernel_sizes": [15, 41, 5, 3],
+                     "channels": 128,
+                     "max_downsample_channels": 1024,
+                     "max_groups": 16,
+                     "bias": True,
+                     "downsample_scales": [2, 2, 4, 4, 1],
+                     "nonlinear_activation": "LeakyReLU",
                      "nonlinear_activation_params": {"negative_slope": 0.1},
-                     },
+                 },
                  follow_official_norm=False, ):
         """
         Initialize HiFiGAN multi-scale discriminator module.
@@ -546,7 +546,7 @@ class HiFiGANMultiScaleDiscriminator(torch.nn.Module):
         """
         outs = []
         for f in self.discriminators:
-            outs += [f(x)]
+            outs = outs + [f(x)]
             x = self.pooling(x)
 
         return outs
@@ -560,37 +560,37 @@ class HiFiGANMultiScaleMultiPeriodDiscriminator(torch.nn.Module):
                  scale_downsample_pooling="AvgPool1d",
                  scale_downsample_pooling_params={
                      "kernel_size": 4,
-                     "stride"     : 2,
-                     "padding"    : 2,
-                     },
+                     "stride": 2,
+                     "padding": 2,
+                 },
                  scale_discriminator_params={
-                     "in_channels"                : 1,
-                     "out_channels"               : 1,
-                     "kernel_sizes"               : [15, 41, 5, 3],
-                     "channels"                   : 128,
-                     "max_downsample_channels"    : 1024,
-                     "max_groups"                 : 16,
-                     "bias"                       : True,
-                     "downsample_scales"          : [4, 4, 4, 4, 1],
-                     "nonlinear_activation"       : "LeakyReLU",
+                     "in_channels": 1,
+                     "out_channels": 1,
+                     "kernel_sizes": [15, 41, 5, 3],
+                     "channels": 128,
+                     "max_downsample_channels": 1024,
+                     "max_groups": 16,
+                     "bias": True,
+                     "downsample_scales": [4, 4, 4, 4, 1],
+                     "nonlinear_activation": "LeakyReLU",
                      "nonlinear_activation_params": {"negative_slope": 0.1},
-                     },
+                 },
                  follow_official_norm=True,
                  # Multi-period discriminator related
                  periods=[2, 3, 5, 7, 11],
                  period_discriminator_params={
-                     "in_channels"                : 1,
-                     "out_channels"               : 1,
-                     "kernel_sizes"               : [5, 3],
-                     "channels"                   : 32,
-                     "downsample_scales"          : [3, 3, 3, 3, 1],
-                     "max_downsample_channels"    : 1024,
-                     "bias"                       : True,
-                     "nonlinear_activation"       : "LeakyReLU",
+                     "in_channels": 1,
+                     "out_channels": 1,
+                     "kernel_sizes": [5, 3],
+                     "channels": 32,
+                     "downsample_scales": [3, 3, 3, 3, 1],
+                     "max_downsample_channels": 1024,
+                     "bias": True,
+                     "nonlinear_activation": "LeakyReLU",
                      "nonlinear_activation_params": {"negative_slope": 0.1},
-                     "use_weight_norm"            : True,
-                     "use_spectral_norm"          : False,
-                     }, ):
+                     "use_weight_norm": True,
+                     "use_spectral_norm": False,
+                 }, ):
         """
         Initialize HiFiGAN multi-scale + multi-period discriminator module.
 

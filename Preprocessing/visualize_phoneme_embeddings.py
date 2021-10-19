@@ -7,8 +7,6 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from gensim.models import KeyedVectors
 
-from ArticulatoryCombinedTextFrontend import ArticulatoryCombinedTextFrontend
-
 
 def plot_embeddings(reduced_data, phoneme_list, title):
     consonants = ['w', 'b', 'ɡ', 'n', 'ʒ', 'ʃ', 'd', 'l', 'θ', 'ŋ', 'f', 'ɾ', 's', 'm', 't', 'h', 'z', 'p', 'ʔ', 'v', 'ɹ', 'j', 'ð', 'k']

@@ -2,7 +2,6 @@
 #  Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
 # Adapted by Florian Lux 2021
 
-
 import torch
 import torch.nn.functional as F
 
@@ -224,13 +223,11 @@ class Postnet(torch.nn.Module):
 class Decoder(torch.nn.Module):
     """
     Decoder module of Spectrogram prediction network.
-
     This is a module of decoder of Spectrogram prediction network in Tacotron2,
     which described in `Natural TTS
     Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions`_.
     The decoder generates the sequence of
     features from the sequence of the hidden states.
-
     .. _`Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions`:
        https://arxiv.org/abs/1712.05884
     """
@@ -251,12 +248,11 @@ class Decoder(torch.nn.Module):
                  use_batch_norm=True,
                  use_concate=True,
                  dropout_rate=0.5,
+                 dropout_rate_prenet=0.7,
                  zoneout_rate=0.1,
-                 reduction_factor=1,
-                 speaker_embedding_projection_size=None):
+                 reduction_factor=1):
         """
         Initialize Tacotron2 decoder module.
-
         Args:
             idim (int): Dimension of the inputs.
             odim (int): Dimension of the outputs.
@@ -289,8 +285,6 @@ class Decoder(torch.nn.Module):
         self.cumulate_att_w = cumulate_att_w
         self.use_concate = use_concate
         self.reduction_factor = reduction_factor
-        self.speaker_embedding_projection_size = speaker_embedding_projection_size
-
 
         # check attention type
         if isinstance(self.att, AttForwardTA):
@@ -310,16 +304,10 @@ class Decoder(torch.nn.Module):
 
         # define prenet
         if prenet_layers > 0:
-            if speaker_embedding_projection_size is not None:
-                self.prenet = Prenet(idim=odim + speaker_embedding_projection_size,
-                                     n_layers=prenet_layers,
-                                     n_units=prenet_units,
-                                     dropout_rate=dropout_rate, )
-            else:
-                self.prenet = Prenet(idim=odim,
-                                     n_layers=prenet_layers,
-                                     n_units=prenet_units,
-                                     dropout_rate=dropout_rate, )
+            self.prenet = Prenet(idim=odim,
+                                 n_layers=prenet_layers,
+                                 n_units=prenet_units,
+                                 dropout_rate=dropout_rate_prenet, )
         else:
             self.prenet = None
 
@@ -347,21 +335,18 @@ class Decoder(torch.nn.Module):
         init_hs = hs.new_zeros(hs.size(0), self.lstm[0].hidden_size)
         return init_hs
 
-    def forward(self, hs, hlens, ys, speaker_embedding=None):
+    def forward(self, hs, hlens, ys):
         """Calculate forward propagation.
-
         Args:
             hs (Tensor): Batch of the sequences of padded hidden states (B, Tmax, idim).
             hlens (LongTensor): Batch of lengths of each input batch (B,).
             ys (Tensor):
                 Batch of the sequences of padded target features (B, Lmax, odim).
-
         Returns:
             Tensor: Batch of output tensors after postnet (B, Lmax, odim).
             Tensor: Batch of output tensors before postnet (B, Lmax, odim).
             Tensor: Batch of logits of stop prediction (B, Lmax).
             Tensor: Batch of attention weights (B, Lmax, Tmax).
-
         Note:
             This computation is performed in teacher-forcing manner.
         """
@@ -376,8 +361,8 @@ class Decoder(torch.nn.Module):
         c_list = [self._zero_state(hs)]
         z_list = [self._zero_state(hs)]
         for _ in range(1, len(self.lstm)):
-            c_list += [self._zero_state(hs)]
-            z_list += [self._zero_state(hs)]
+            c_list = c_list + [self._zero_state(hs)]
+            z_list = z_list + [self._zero_state(hs)]
         prev_out = hs.new_zeros(hs.size(0), self.odim)
 
         # initialize attention
@@ -387,22 +372,20 @@ class Decoder(torch.nn.Module):
         # loop for an output sequence
         outs, logits, att_ws = [], [], []
         for y in ys.transpose(0, 1):
+
             if self.use_att_extra_inputs:
                 att_c, att_w = self.att(hs, hlens, z_list[0], prev_att_w, prev_out)
             else:
                 att_c, att_w = self.att(hs, hlens, z_list[0], prev_att_w)
-            if self.speaker_embedding_projection_size is not None:
-                prenet_out = self.prenet(torch.cat([prev_out, speaker_embedding], dim=-1)) if self.prenet is not None else prev_out
-            else:
-                prenet_out = self.prenet(prev_out) if self.prenet is not None else prev_out
+            prenet_out = self.prenet(prev_out) if self.prenet is not None else prev_out
             xs = torch.cat([att_c, prenet_out], dim=1)
             z_list[0], c_list[0] = self.lstm[0](xs, (z_list[0], c_list[0]))
             for i in range(1, len(self.lstm)):
                 z_list[i], c_list[i] = self.lstm[i](z_list[i - 1], (z_list[i], c_list[i]))
             zcs = (torch.cat([z_list[-1], att_c], dim=1) if self.use_concate else z_list[-1])
-            outs += [self.feat_out(zcs).view(hs.size(0), self.odim, -1)]
-            logits += [self.prob_out(zcs)]
-            att_ws += [att_w]
+            outs = outs + [self.feat_out(zcs).view(hs.size(0), self.odim, -1)]
+            logits = logits + [self.prob_out(zcs)]
+            att_ws = att_ws + [att_w]
             prev_out = y  # teacher forcing
             if self.cumulate_att_w and prev_att_w is not None:
                 prev_att_w = prev_att_w + att_w  # Note: error when use +=
@@ -438,11 +421,9 @@ class Decoder(torch.nn.Module):
                   maxlenratio=10.0,
                   use_att_constraint=False,
                   backward_window=None,
-                  forward_window=None,
-                  speaker_embedding = None):
+                  forward_window=None):
         """
         Generate the sequence of features given the sequences of characters.
-
         Args:
             h (Tensor): Input sequence of encoder hidden states (T, C).
             threshold (float, optional): Threshold to stop generation.
@@ -456,12 +437,10 @@ class Decoder(torch.nn.Module):
                 Whether to apply attention constraint introduced in `Deep Voice 3`_.
             backward_window (int): Backward window size in attention constraint.
             forward_window (int): Forward window size in attention constraint.
-
         Returns:
             Tensor: Output sequence of features (L, odim).
             Tensor: Output sequence of stop probabilities (L,).
             Tensor: Attention weights (L, T).
-
         Note:
             This computation is performed in auto-regressive manner.
         .. _`Deep Voice 3`: https://arxiv.org/abs/1710.07654
@@ -477,8 +456,8 @@ class Decoder(torch.nn.Module):
         c_list = [self._zero_state(hs)]
         z_list = [self._zero_state(hs)]
         for _ in range(1, len(self.lstm)):
-            c_list += [self._zero_state(hs)]
-            z_list += [self._zero_state(hs)]
+            c_list = c_list + [self._zero_state(hs)]
+            z_list = z_list + [self._zero_state(hs)]
         prev_out = hs.new_zeros(1, self.odim)
 
         # initialize attention
@@ -496,7 +475,7 @@ class Decoder(torch.nn.Module):
         outs, att_ws, probs = [], [], []
         while True:
             # updated index
-            idx += self.reduction_factor
+            idx = idx + self.reduction_factor
 
             # decoder calculation
             if self.use_att_extra_inputs:
@@ -517,18 +496,15 @@ class Decoder(torch.nn.Module):
                                         backward_window=backward_window,
                                         forward_window=forward_window, )
 
-            att_ws += [att_w]
-            if self.speaker_embedding_projection_size is not None:
-                prenet_out = self.prenet(torch.cat([prev_out, speaker_embedding], dim=-1)) if self.prenet is not None else prev_out
-            else:
-                prenet_out = self.prenet(prev_out) if self.prenet is not None else prev_out
+            att_ws = att_ws + [att_w]
+            prenet_out = self.prenet(prev_out) if self.prenet is not None else prev_out
             xs = torch.cat([att_c, prenet_out], dim=1)
             z_list[0], c_list[0] = self.lstm[0](xs, (z_list[0], c_list[0]))
             for i in range(1, len(self.lstm)):
                 z_list[i], c_list[i] = self.lstm[i](z_list[i - 1], (z_list[i], c_list[i]))
             zcs = (torch.cat([z_list[-1], att_c], dim=1) if self.use_concate else z_list[-1])
-            outs += [self.feat_out(zcs).view(1, self.odim, -1)]  # [(1, odim, r), ...]
-            probs += [torch.sigmoid(self.prob_out(zcs))[0]]  # [(r), ...]
+            outs = outs + [self.feat_out(zcs).view(1, self.odim, -1)]  # [(1, odim, r), ...]
+            probs = probs + [torch.sigmoid(self.prob_out(zcs))[0]]  # [(r), ...]
             if self.output_activation_fn is not None:
                 prev_out = self.output_activation_fn(outs[-1][:, :, -1])  # (1, odim)
             else:
@@ -557,61 +533,3 @@ class Decoder(torch.nn.Module):
             outs = self.output_activation_fn(outs)
 
         return outs, probs, att_ws
-
-    def calculate_all_attentions(self, hs, hlens, ys):
-        """
-        Calculate all of the attention weights.
-
-        Args:
-            hs (Tensor): Batch of the sequences of padded hidden states (B, Tmax, idim).
-            hlens (LongTensor): Batch of lengths of each input batch (B,).
-            ys (Tensor):
-                Batch of the sequences of padded target features (B, Lmax, odim).
-
-        Returns:
-            numpy.ndarray: Batch of attention weights (B, Lmax, Tmax).
-
-        Note:
-            This computation is performed in teacher-forcing manner.
-        """
-        # thin out frames (B, Lmax, odim) ->  (B, Lmax/r, odim)
-        if self.reduction_factor > 1:
-            ys = ys[:, self.reduction_factor - 1:: self.reduction_factor]
-
-        # length list should be list of int
-        hlens = list(map(int, hlens))
-
-        # initialize hidden states of decoder
-        c_list = [self._zero_state(hs)]
-        z_list = [self._zero_state(hs)]
-        for _ in range(1, len(self.lstm)):
-            c_list += [self._zero_state(hs)]
-            z_list += [self._zero_state(hs)]
-        prev_out = hs.new_zeros(hs.size(0), self.odim)
-
-        # initialize attention
-        prev_att_w = None
-        self.att.reset()
-
-        # loop for an output sequence
-        att_ws = []
-        for y in ys.transpose(0, 1):
-            if self.use_att_extra_inputs:
-                att_c, att_w = self.att(hs, hlens, z_list[0], prev_att_w, prev_out)
-            else:
-                att_c, att_w = self.att(hs, hlens, z_list[0], prev_att_w)
-            att_ws += [att_w]
-            prenet_out = self.prenet(prev_out) if self.prenet is not None else prev_out
-            xs = torch.cat([att_c, prenet_out], dim=1)
-            z_list[0], c_list[0] = self.lstm[0](xs, (z_list[0], c_list[0]))
-            for i in range(1, len(self.lstm)):
-                z_list[i], c_list[i] = self.lstm[i](z_list[i - 1], (z_list[i], c_list[i]))
-            prev_out = y  # teacher forcing
-            if self.cumulate_att_w and prev_att_w is not None:
-                prev_att_w = prev_att_w + att_w  # Note: error when use +=
-            else:
-                prev_att_w = att_w
-
-        att_ws = torch.stack(att_ws, dim=1)  # (B, Lmax, Tmax)
-
-        return att_ws

@@ -28,7 +28,7 @@ def run(gpu_id, resume_checkpoint, finetune, model_dir, resume):
     if model_dir is not None:
         save_dir = model_dir
     else:
-        save_dir = os.path.join("Models", "Tacotron2_Nancy")
+        save_dir = os.path.join("Models", "Tacotron2_Nancy_DTW")
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
     if not os.path.exists(save_dir):
@@ -38,11 +38,9 @@ def run(gpu_id, resume_checkpoint, finetune, model_dir, resume):
 
     train_set = TacotronDataset(path_to_transcript_dict,
                                 cache_dir=cache_dir,
-                                lang="en",
-                                cut_silences=False,
-                                device=device)
+                                lang="en")
 
-    model = Tacotron2(idim=384, initialize_from_pretrained_embedding_weights=False)
+    model = Tacotron2(initialize_from_pretrained_embedding_weights=False, use_dtw_loss=True)
 
     print("Training model")
     train_loop(net=model,
@@ -50,12 +48,11 @@ def run(gpu_id, resume_checkpoint, finetune, model_dir, resume):
                device=device,
                save_directory=save_dir,
                steps=100000,
-               batch_size=32,
+               batch_size=20,
                epochs_per_save=1,
-               use_speaker_embedding=False,
                lang="en",
                lr=0.001,
                path_to_checkpoint=resume_checkpoint,
                fine_tune=finetune,
-               freeze_embedding_until=100000,
+               freeze_embedding_until=110000,
                resume=resume)

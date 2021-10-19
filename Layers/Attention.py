@@ -212,7 +212,7 @@ class GuidedAttentionLoss(torch.nn.Module):
         https://arxiv.org/abs/1710.08969
     """
 
-    def __init__(self, sigma=0.4, alpha=1.0, reset_always=True):
+    def __init__(self, sigma=0.4, alpha=1.0):
         """
         Initialize guided attention loss module.
 
@@ -225,7 +225,6 @@ class GuidedAttentionLoss(torch.nn.Module):
         super(GuidedAttentionLoss, self).__init__()
         self.sigma = sigma
         self.alpha = alpha
-        self.reset_always = reset_always
         self.guided_attn_masks = None
         self.masks = None
 
@@ -245,21 +244,19 @@ class GuidedAttentionLoss(torch.nn.Module):
         Returns:
             Tensor: Guided attention loss value.
         """
-        if self.guided_attn_masks is None:
-            self.guided_attn_masks = self._make_guided_attention_masks(ilens, olens).to(att_ws.device)
-        if self.masks is None:
-            self.masks = self._make_masks(ilens, olens).to(att_ws.device)
+        self._reset_masks()
+        self.guided_attn_masks = self._make_guided_attention_masks(ilens, olens).to(att_ws.device)
+        self.masks = self._make_masks(ilens, olens).to(att_ws.device)
         losses = self.guided_attn_masks * att_ws
         loss = torch.mean(losses.masked_select(self.masks))
-        if self.reset_always:
-            self._reset_masks()
+        self._reset_masks()
         return self.alpha * loss
 
     def _make_guided_attention_masks(self, ilens, olens):
         n_batches = len(ilens)
         max_ilen = max(ilens)
         max_olen = max(olens)
-        guided_attn_masks = torch.zeros((n_batches, max_olen, max_ilen))
+        guided_attn_masks = torch.zeros((n_batches, max_olen, max_ilen), device=ilens.device)
         for idx, (ilen, olen) in enumerate(zip(ilens, olens)):
             guided_attn_masks[idx, :olen, :ilen] = self._make_guided_attention_mask(ilen, olen, self.sigma)
         return guided_attn_masks
@@ -269,8 +266,7 @@ class GuidedAttentionLoss(torch.nn.Module):
         """
         Make guided attention mask.
         """
-        grid_x, grid_y = torch.meshgrid(torch.arange(olen), torch.arange(ilen))
-        grid_x, grid_y = grid_x.float().to(olen.device), grid_y.float().to(ilen.device)
+        grid_x, grid_y = torch.meshgrid(torch.arange(olen, device=olen.device).float(), torch.arange(ilen, device=ilen.device).float())
         return 1.0 - torch.exp(-((grid_y / ilen - grid_x / olen) ** 2) / (2 * (sigma ** 2)))
 
     @staticmethod
@@ -287,8 +283,8 @@ class GuidedAttentionLoss(torch.nn.Module):
                     dtype=torch.uint8 in PyTorch 1.2-
                     dtype=torch.bool in PyTorch 1.2+ (including 1.2)
         """
-        in_masks = make_non_pad_mask(ilens)  # (B, T_in)
-        out_masks = make_non_pad_mask(olens)  # (B, T_out)
+        in_masks = make_non_pad_mask(ilens, device=ilens.device)  # (B, T_in)
+        out_masks = make_non_pad_mask(olens, device=olens.device)  # (B, T_out)
         return out_masks.unsqueeze(-1) & in_masks.unsqueeze(-2)  # (B, T_out, T_in)
 
 
