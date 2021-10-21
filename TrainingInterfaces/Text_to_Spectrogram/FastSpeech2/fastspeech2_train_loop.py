@@ -23,11 +23,25 @@ from Utility.utils import get_most_recent_checkpoint
 
 def plot_progress_spec(net, device, save_dir, step, lang):
     tf = ArticulatoryCombinedTextFrontend(language=lang)
-    sentence = "Hello"
+    sentence = ""
     if lang == "en":
-        sentence = "This is an unseen sentence."
+        sentence = "This is a complex sentence, it even has a pause!"
     elif lang == "de":
-        sentence = "Dies ist ein ungesehener Satz."
+        sentence = "Dies ist ein komplexer Satz, er hat sogar eine Pause!"
+    elif lang == "el":
+        sentence = "Αυτή είναι μια σύνθετη πρόταση, έχει ακόμη και παύση!"
+    elif lang == "es":
+        sentence = "Esta es una oración compleja, ¡incluso tiene una pausa!"
+    elif lang == "fi":
+        sentence = "Tämä on monimutkainen lause, sillä on jopa tauko!"
+    elif lang == "ru":
+        sentence = "Это сложное предложение, в нем даже есть пауза!"
+    elif lang == "hu":
+        sentence = "Ez egy összetett mondat, még szünet is van benne!"
+    elif lang == "nl":
+        sentence = "Dit is een complexe zin, er zit zelfs een pauze in!"
+    elif lang == "fr":
+        sentence = "C'est une phrase complexe, elle a même une pause !"
     phoneme_vector = tf.string_to_tensor(sentence).squeeze(0).to(device)
     spec, durations, *_ = net.inference(text=phoneme_vector, return_duration_pitch_energy=True)
     spec = spec.transpose(0, 1).to("cpu").numpy()
@@ -97,10 +111,13 @@ def train_loop(net,
 
     """
     net = net.to(device)
-
-    speaker_embedding_func = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb",
-                                                            run_opts={"device": str(device)},
-                                                            savedir="Models/SpeakerEmbedding/speechbrain_speaker_embedding_ecapa")
+    if cycle_loss_start_steps is not None:
+        speaker_embedding_func = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb",
+                                                                run_opts={"device": str(device)},
+                                                                savedir="Models/SpeakerEmbedding/speechbrain_speaker_embedding_ecapa")
+    else:
+        speaker_embedding_func = None
+        cycle_loss_start_steps = 0
 
     torch.multiprocessing.set_sharing_strategy('file_system')
     train_loader = DataLoader(batch_size=batch_size,
@@ -144,8 +161,10 @@ def train_loop(net,
                                                  gold_energy=batch[6].to(device),
                                                  return_mels=True)
 
+                print("forward pass successfull")
+
                 train_losses_this_epoch.append(train_loss.item())
-                if step_counter > cycle_loss_start_steps:
+                if step_counter > cycle_loss_start_steps and speaker_embedding_func is not None:
                     pred_spemb = speaker_embedding_func.modules.embedding_model(predicted_mels,
                                                                                 torch.tensor([x / len(predicted_mels[0]) for x in batch[3]]))
                     gold_spemb = speaker_embedding_func.modules.embedding_model(batch[2].to(device),
@@ -161,7 +180,8 @@ def train_loop(net,
                     train_loss = train_loss + cycle_loss
 
             optimizer.zero_grad()
-            speaker_embedding_func.modules.embedding_model.zero_grad()
+            if speaker_embedding_func is not None:
+                speaker_embedding_func.modules.embedding_model.zero_grad()
             scaler.scale(train_loss).backward()
             del train_loss
             step_counter += 1

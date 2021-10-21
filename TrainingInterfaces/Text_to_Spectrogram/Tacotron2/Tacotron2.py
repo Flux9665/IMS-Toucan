@@ -64,7 +64,7 @@ class Tacotron2(torch.nn.Module):
             use_guided_attn_loss=True,
             guided_attn_loss_lambda=1.0,  # weight of the attention loss
             guided_attn_loss_sigma=0.4,  # deviation from the main diagonal that is allowed
-            use_dtw_loss=False,
+            use_dtw_loss=False,  # really cool concept, but requires tons and tons of GPU-memory
             use_alignment_loss=True,
             input_layer_type="linear"):
         super().__init__()
@@ -201,10 +201,9 @@ class Tacotron2(torch.nn.Module):
         # calculate dtw loss
         if self.use_dtw_loss:
             if len(speech[0]) < 1024:
-                # max block size supported by cuda. have to skip this batch
+                # max block size supported by cuda. Have to skip this batch if sequence is too long
                 dtw_loss = self.dtw_criterion(after_outs, speech).mean() / 2000.0  # division to balance orders of magnitude
-                # loss = loss + dtw_loss
-                print(dtw_loss.item())
+                loss = loss + dtw_loss
                 losses["dtw"] = dtw_loss.item()
 
         # calculate attention loss
