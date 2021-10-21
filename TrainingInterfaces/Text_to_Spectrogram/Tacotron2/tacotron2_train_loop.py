@@ -117,7 +117,8 @@ def train_loop(net,
                collapse_margin=5.0,  # be wary of loss scheduling
                resume=False,
                cycle_loss_start_steps=None,
-               silent=False):
+               silent=False,
+               freeze_embedding=False):
     """
     Args:
         silent: whether to print things, which can be problematic in multiprocessing when all processes print over each other
@@ -137,6 +138,9 @@ def train_loop(net,
         epochs_per_save: how many epochs to train in between checkpoints
     """
     net = net.to(device)
+    if freeze_embedding:
+        for param in net.enc.embed.parameters():
+            param.requires_grad = False
     previous_error = 999999  # tacotron can collapse sometimes and requires soft-resets. This is to detect collapses.
     train_loader = DataLoader(batch_size=batch_size,
                               dataset=train_dataset,
