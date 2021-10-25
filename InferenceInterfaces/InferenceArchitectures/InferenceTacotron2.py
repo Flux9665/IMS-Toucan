@@ -15,7 +15,7 @@ class Tacotron2(torch.nn.Module):
             self,
             # network structure related
             path_to_weights,
-            idim=66,
+            idim=384, # number of dimensions of pretrained phone2vec embeddings
             odim=80,
             embed_dim=512,
             elayers=1,

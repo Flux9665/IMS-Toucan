@@ -8,7 +8,7 @@ import torch
 
 from InferenceInterfaces.InferenceArchitectures.InferenceHiFiGAN import HiFiGANGenerator
 from InferenceInterfaces.InferenceArchitectures.InferenceTacotron2 import Tacotron2
-from Preprocessing.ArticulatoryCombinedTextFrontend import ArticulatoryCombinedTextFrontend
+from Preprocessing.Phone2VecTextFrontend import Phone2VecTextFrontend
 
 
 class Nancy_Tacotron2(torch.nn.Module):
@@ -16,7 +16,7 @@ class Nancy_Tacotron2(torch.nn.Module):
     def __init__(self, device="cpu"):
         super().__init__()
         self.device = device
-        self.text2phone = ArticulatoryCombinedTextFrontend(language="en", inference=True)
+        self.text2phone = Phone2VecTextFrontend(language="en", inference=True)
         self.phone2mel = Tacotron2(path_to_weights=os.path.join("Models", "Tacotron2_Nancy", "best.pt")).to(torch.device(device))
         self.mel2wav = HiFiGANGenerator(path_to_weights=os.path.join("Models", "HiFiGAN_combined", "best.pt")).to(torch.device(device))
         self.phone2mel.eval()

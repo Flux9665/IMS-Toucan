@@ -20,7 +20,7 @@ from Utility.utils import delete_old_checkpoints
 from Utility.utils import get_most_recent_checkpoint
 
 
-def plot_attention(model, lang, device, speaker_embedding, att_dir, step, language_id):
+def plot_attention(model, lang, device, att_dir, step):
     tf = Phone2VecTextFrontend(language=lang)
     sentence = ""
     if lang == "en":
