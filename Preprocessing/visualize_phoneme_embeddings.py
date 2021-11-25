@@ -11,7 +11,7 @@ from gensim.models import KeyedVectors
 def plot_embeddings(reduced_data, phoneme_list, title):
     consonants = ['w', 'b', 'ɡ', 'n', 'ʒ', 'ʃ', 'd', 'l', 'θ', 'ŋ', 'f', 'ɾ', 's', 'm', 't', 'h', 'z', 'p', 'ʔ', 'v', 'ɹ', 'j', 'ð', 'k']
     vowels = ['o', 'ɛ', 'ᵻ', 'ɔ', 'æ', 'i', 'ɐ', 'ɜ', 'ə', 'ɑ', 'e', 'ʌ', 'ɚ', 'a', 'ɪ', 'ʊ', 'u']
-    special_symbols = ['?', '.', '!', '~']
+    special_symbols = ['?', '.', '!', '~', '#']
 
     plt.clf()
     plt.scatter(x=[x[0] for x in reduced_data], y=[x[1] for x in reduced_data], marker=MarkerStyle())
@@ -42,7 +42,8 @@ if __name__ == '__main__':
     key_list = list()  # no matter where you get it from, this needs to be a list of the phonemes you want to visualize as string
     embedding_list = list()  # in the same order as the phonemes in the list above, this list needs to be filled with their embedding vectors
 
-    word_vectors = KeyedVectors.load('Preprocessing/embedding_pretrained_phone2vec_en_384_dim.kv')
+    #word_vectors = KeyedVectors.load('Preprocessing/embedding_pretrained_phone2vec_en_384_dim.kv')
+    word_vectors = KeyedVectors.load('/mount/arbeitsdaten/dialog-1/kochja/projects/Phone-Embeddings/Models/384_dim_gum.kv')
 
 
     #for key in datapoints:

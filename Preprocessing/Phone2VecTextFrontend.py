@@ -23,7 +23,7 @@ class Phone2VecTextFrontend:
                  # with such information would help.
                  use_lexical_stress=False,
                  silent=True,
-                 allow_unknown=False,
+                 allow_unknown=True,
                  inference=False,
                  strip_silence=True):
         """
@@ -36,21 +36,6 @@ class Phone2VecTextFrontend:
         self.use_prosody = use_prosody
         self.use_stress = use_lexical_stress
         self.inference = inference
-
-        self.language_id_lookup = {
-            "en": 1,
-            "de": 2,
-            "el": 3,
-            "es": 4,
-            "fi": 5,
-            "ru": 6,
-            "hu": 7,
-            "nl": 8,
-            "fr": 9,
-            # add up to 30, if you want more, you need to hack in more embeddings into the language embedding layer of the meta checkpoint
-        }
-
-        self.language_id = self.language_id_lookup[language]
 
         if language == "en":
             self.clean_lang = "en"
@@ -128,10 +113,6 @@ class Phone2VecTextFrontend:
         for _, key in enumerate(pretrained.index_to_key):
             self.phone_to_vector[key] = pretrained[key]
         
-        # print('?' + str(self.phone_to_vector['?']))
-        # print('\nç' + str(self.phone_to_vector['ç']))
-        # print('\nf' + str(self.phone_to_vector['f']))
-        
     def string_to_tensor(self, text, view=False):
         """
         Fixes unicode errors, expands some abbreviations,
@@ -165,6 +146,7 @@ class Phone2VecTextFrontend:
                                       with_stress=self.use_stress).replace(";", ",").replace("/", " ") \
             .replace(":", ",").replace('"', ",").replace("-", ",").replace("-", ",").replace("\n", " ") \
             .replace("\t", " ").replace("¡", "").replace("¿", "").replace(",", "~").replace(" ̃", "").replace('̩', "").replace("̃", "")
+            
         # less than 1 wide characters hidden here
         phones = re.sub("~+", "~", phones)
         if not self.use_prosody:
@@ -205,5 +187,5 @@ if __name__ == '__main__':
     tfr_en = Phone2VecTextFrontend(language="en")
     print(tfr_en.string_to_tensor("This is a complex sentence, it even has a pause! But can it do this? Nice.", view=True))
 
-    tfr_en = Phone2VecTextFrontend(language="de")
-    print(tfr_en.string_to_tensor("Alles klar, jetzt testen wir einen deutschen Satz. Ich hoffe es gibt nicht mehr viele unspezifizierte Phoneme.", view=True))
+    tfr_de = Phone2VecTextFrontend(language="de")
+    print(tfr_de.string_to_tensor("Sofort wurde klar, dass mehr Patienten warteten, als Stühle im Wartezimmer vorhanden waren.", view=True))
