@@ -28,7 +28,7 @@ class PositionalEncoding(torch.nn.Module):
         self.xscale = math.sqrt(self.d_model)
         self.dropout = torch.nn.Dropout(p=dropout_rate)
         self.pe = None
-        self.extend_pe(torch.tensor(0.0).expand(1, max_len))
+        self.extend_pe(torch.tensor(0.0, device=d_model.device).expand(1, max_len))
 
     def extend_pe(self, x):
         """
@@ -99,10 +99,13 @@ class RelPositionalEncoding(torch.nn.Module):
         # Suppose `i` means to the position of query vecotr and `j` means the
         # position of key vector. We use position relative positions when keys
         # are to the left (i>j) and negative relative positions otherwise (i<j).
+
         pe_positive = torch.zeros(x.size(1), self.d_model, device=x.device)
         pe_negative = torch.zeros(x.size(1), self.d_model, device=x.device)
+
         position = torch.arange(0, x.size(1), dtype=torch.float32, device=x.device).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, self.d_model, 2, dtype=torch.float32, device=x.device) * -(math.log(10000.0) / self.d_model))
+
         pe_positive[:, 0::2] = torch.sin(position * div_term)
         pe_positive[:, 1::2] = torch.cos(position * div_term)
         pe_negative[:, 0::2] = torch.sin(-1 * position * div_term)
@@ -112,9 +115,12 @@ class RelPositionalEncoding(torch.nn.Module):
         # negative indices. This is used to support the shifting trick
         # as in https://arxiv.org/abs/1901.02860
         pe_positive = torch.flip(pe_positive, [0]).unsqueeze(0)
+
         pe_negative = pe_negative[1:].unsqueeze(0)
+
         pe = torch.cat([pe_positive, pe_negative], dim=1)
-        self.pe = pe.to(device=x.device, dtype=x.dtype)
+
+        self.pe = pe.to(dtype=x.dtype)
 
     def forward(self, x):
         """
@@ -124,7 +130,9 @@ class RelPositionalEncoding(torch.nn.Module):
         Returns:
             torch.Tensor: Encoded tensor (batch, time, `*`).
         """
+        print("AAAA")
         self.extend_pe(x)
+        print("BBBB")
         x = x * self.xscale
         pos_emb = self.pe[:, self.pe.size(1) // 2 - x.size(1) + 1: self.pe.size(1) // 2 + x.size(1), ]
         return self.dropout(x), self.dropout(pos_emb)
