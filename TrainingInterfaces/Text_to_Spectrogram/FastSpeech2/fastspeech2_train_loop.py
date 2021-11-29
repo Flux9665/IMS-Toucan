@@ -68,14 +68,25 @@ def plot_progress_spec(net, device, save_dir, step, lang):
 
 
 def collate_and_pad(batch):
-    # text, text_len, speech, speech_len, durations, energy, pitch
-    return (pad_sequence([datapoint[0] for datapoint in batch], batch_first=True),
-            torch.stack([datapoint[1] for datapoint in batch]).squeeze(1),
-            pad_sequence([datapoint[2] for datapoint in batch], batch_first=True),
-            torch.stack([datapoint[3] for datapoint in batch]).squeeze(1),
-            pad_sequence([datapoint[4] for datapoint in batch], batch_first=True),
-            pad_sequence([datapoint[5] for datapoint in batch], batch_first=True),
-            pad_sequence([datapoint[6] for datapoint in batch], batch_first=True))
+    if len(batch[0]) == 8:
+        # text, text_len, speech, speech_len, durations, energy, pitch, speaker_emb
+        return (pad_sequence([datapoint[0] for datapoint in batch], batch_first=True),
+                torch.stack([datapoint[1] for datapoint in batch]).squeeze(1),
+                pad_sequence([datapoint[2] for datapoint in batch], batch_first=True),
+                torch.stack([datapoint[3] for datapoint in batch]).squeeze(1),
+                pad_sequence([datapoint[4] for datapoint in batch], batch_first=True),
+                pad_sequence([datapoint[5] for datapoint in batch], batch_first=True),
+                pad_sequence([datapoint[6] for datapoint in batch], batch_first=True),
+                torch.stack([datapoint[7] for datapoint in batch]))
+    else:
+        # text, text_len, speech, speech_len, durations, energy, pitch
+        return (pad_sequence([datapoint[0] for datapoint in batch], batch_first=True),
+                torch.stack([datapoint[1] for datapoint in batch]).squeeze(1),
+                pad_sequence([datapoint[2] for datapoint in batch], batch_first=True),
+                torch.stack([datapoint[3] for datapoint in batch]).squeeze(1),
+                pad_sequence([datapoint[4] for datapoint in batch], batch_first=True),
+                pad_sequence([datapoint[5] for datapoint in batch], batch_first=True),
+                pad_sequence([datapoint[6] for datapoint in batch], batch_first=True))
 
 
 def train_loop(net,
@@ -86,15 +97,13 @@ def train_loop(net,
                steps=300000,
                epochs_per_save=5,
                lang="en",
-               lr=0.0001,
+               lr=0.001,
                warmup_steps=14000,
                path_to_checkpoint=None,
                fine_tune=False,
-               resume=False,
-               cycle_loss_start_steps=1000):
+               resume = False):
     """
     Args:
-        cycle_loss_start_steps: after how many steps the cycle consistency loss for voice identity should start
         resume: whether to resume from the most recent checkpoint
         warmup_steps: how long the learning rate should increase before it reaches the specified value
         steps: How many steps to train
@@ -102,13 +111,13 @@ def train_loop(net,
         path_to_checkpoint: reloads a checkpoint to continue training from there
         fine_tune: whether to load everything from a checkpoint, or only the model parameters
         lang: language of the synthesis
+        use_speaker_embedding: whether to expect speaker embeddings
         net: Model to train
         train_dataset: Pytorch Dataset Object for train data
         device: Device to put the loaded tensors on
         save_directory: Where to save the checkpoints
         batch_size: How many elements should be loaded at once
         epochs_per_save: how many epochs to train in between checkpoints
-
     """
     net = net.to(device)
     if cycle_loss_start_steps is not None:
@@ -152,33 +161,15 @@ def train_loop(net,
         train_losses_this_epoch = list()
         for batch in tqdm(train_loader):
             with autocast():
-                train_loss, predicted_mels = net(text_tensors=batch[0].to(device),
-                                                 text_lengths=batch[1].to(device),
-                                                 gold_speech=batch[2].to(device),
-                                                 speech_lengths=batch[3].to(device),
-                                                 gold_durations=batch[4].to(device),
-                                                 gold_pitch=batch[5].to(device),
-                                                 gold_energy=batch[6].to(device),
-                                                 return_mels=True)
-
-                print("forward pass successfull")
-
+                if not use_speaker_embedding:
+                    train_loss = net(batch[0].to(device), batch[1].to(device), batch[2].to(device),
+                                     batch[3].to(device), batch[4].to(device), batch[5].to(device),
+                                     batch[6].to(device))
+                else:
+                    train_loss = net(batch[0].to(device), batch[1].to(device), batch[2].to(device),
+                                     batch[3].to(device), batch[4].to(device), batch[5].to(device),
+                                     batch[6].to(device), batch[7].to(device))
                 train_losses_this_epoch.append(train_loss.item())
-                if step_counter > cycle_loss_start_steps and speaker_embedding_func is not None:
-                    pred_spemb = speaker_embedding_func.modules.embedding_model(predicted_mels,
-                                                                                torch.tensor([x / len(predicted_mels[0]) for x in batch[3]]))
-                    gold_spemb = speaker_embedding_func.modules.embedding_model(batch[2].to(device),
-                                                                                torch.tensor([x / len(batch[2][0]) for x in batch[3]]))
-                    # we have to recalculate the speaker embedding from our own mel because we project into a slightly different mel space
-                    cosine_cycle_distance = torch.tensor(1.0) - F.cosine_similarity(pred_spemb.squeeze(), gold_spemb.squeeze(), dim=1).mean()
-                    pairwise_cycle_distance = F.pairwise_distance(pred_spemb.squeeze(), gold_spemb.squeeze()).mean()
-                    cycle_distance = cosine_cycle_distance + pairwise_cycle_distance
-                    del pred_spemb
-                    del predicted_mels
-                    del gold_spemb
-                    cycle_loss = cycle_distance * min(1.0, (step_counter - cycle_loss_start_steps) / 100000)
-                    train_loss = train_loss + cycle_loss
-
             optimizer.zero_grad()
             if speaker_embedding_func is not None:
                 speaker_embedding_func.modules.embedding_model.zero_grad()
@@ -190,24 +181,25 @@ def train_loop(net,
             scaler.step(optimizer)
             scaler.update()
             scheduler.step()
-
-        net.eval()
-        if epoch % epochs_per_save == 0:
-            torch.save({
-                "model": net.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "step_counter": step_counter,
-                "scaler": scaler.state_dict(),
-                "scheduler": scheduler.state_dict(),
-            }, os.path.join(save_directory, "checkpoint_{}.pt".format(step_counter)))
-            delete_old_checkpoints(save_directory, keep=5)
-            with torch.no_grad():
-                plot_progress_spec(net, device, save_dir=save_directory, step=step_counter, lang=lang)
-            if step_counter > steps:
-                # DONE
-                return
-        print("Epoch:        {}".format(epoch))
-        print("Train Loss:   {}".format(sum(train_losses_this_epoch) / len(train_losses_this_epoch)))
-        print("Time elapsed: {} Minutes".format(round((time.time() - start_time) / 60)))
-        print("Steps:        {}".format(step_counter))
-        net.train()
+        with torch.no_grad():
+            net.eval()
+            if epoch % epochs_per_save == 0:
+                torch.save({
+                    "model"       : net.state_dict(),
+                    "optimizer"   : optimizer.state_dict(),
+                    "scaler"      : scaler.state_dict(),
+                    "step_counter": step_counter,
+                    "scheduler"   : scheduler.state_dict(),
+                    }, os.path.join(save_directory, "checkpoint_{}.pt".format(step_counter)))
+                delete_old_checkpoints(save_directory, keep=5)
+                plot_progress_spec(net, device, save_dir=save_directory, step=step_counter, lang=lang,
+                                   reference_speaker_embedding_for_plot=reference_speaker_embedding_for_plot)
+                if step_counter > steps:
+                    # DONE
+                    return
+            print("Epoch:        {}".format(epoch))
+            print("Train Loss:   {}".format(sum(train_losses_this_epoch) / len(train_losses_this_epoch)))
+            print("Time elapsed: {} Minutes".format(round((time.time() - start_time) / 60)))
+            print("Steps:        {}".format(step_counter))
+            torch.cuda.empty_cache()
+            net.train()

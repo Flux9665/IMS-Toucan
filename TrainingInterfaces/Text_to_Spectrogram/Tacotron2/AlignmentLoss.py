@@ -7,8 +7,16 @@ from numba import prange
 
 
 # Implementation by:
-# https://github.com/NVIDIA/DeepLearningExamples/blob/master/PyTorch/SpeechSynthesis/FastPitch/fastpitch/alignment.py
-# https://github.com/NVIDIA/DeepLearningExamples/blob/master/PyTorch/SpeechSynthesis/FastPitch/fastpitch/attn_loss_function.py
+# Lee, K. (2021). Comprehensive-Transformer-TTS (Version 0.1.1) [Computer software]. https://doi.org/10.5281/zenodo.5526991
+
+# @misc{Lee_ComprehensiveTransformerTTS_2021,
+# author = {Lee, Keon},
+# doi = {10.5281/zenodo.5526991},
+# month = {9},
+# title = {{Comprehensive-Transformer-TTS}},
+# url = {https://github.com/keonlee9420/Comprehensive-Transformer-TTS},
+# year = {2021}
+# }
 
 
 # Concept by:
@@ -37,7 +45,7 @@ from numba import prange
 
 class ForwardSumLoss(nn.Module):
 
-    def __init__(self, blank_logprob=-10):
+    def __init__(self, blank_logprob=-1):
         """
         The RAD-TTS Paper says the following about the blank_logprob:
 
@@ -52,9 +60,7 @@ class ForwardSumLoss(nn.Module):
         increases, despite the existence of the blank tokens, allowing us
         to extract clean monotonic alignments.
 
-        -1 is given as default in the paper, but I find that the largest
-        initial activations are more around -3 and there is large variance,
-        so I decided to go for -10.
+        -1 is given as default, but maybe something smaller like -10 or -100 might work better in some cases
         """
         super().__init__()
         self.log_softmax = nn.LogSoftmax(dim=3)
@@ -64,20 +70,15 @@ class ForwardSumLoss(nn.Module):
     def forward(self, attn_logprob, text_lens, spectrogram_lens):
         """
         Args:
-            attn_logprob: batch x 1 x max(mel_lens) x max(text_lens) batched
-            tensor of attention log probabilities, padded to length of longest
-            sequence in each dimension
-            text_lens: batch-D vector of length of each text sequence
-            spectrogram_lens: batch-D vector of length of each mel sequence
+        attn_logprob: batch x 1 x max(mel_lens) x max(text_lens) batched tensor of attention log probabilities, padded to length of longest sequence in each dimension
+        text_lens: batch-D vector of length of each text sequence
+        mel_lens: batch-D vector of length of each mel sequence
         """
         # The CTC loss module assumes the existence of a blank token
         # that can be optionally inserted anywhere in the sequence for
         # a fixed probability.
         # A row must be added to the attention matrix to account for this
         attn_logprob_padded = F.pad(input=attn_logprob, pad=(1, 0, 0, 0, 0, 0, 0, 0), value=self.blank_logprob)
-
-        # uncomment for figuring out the largest initial activation
-        # print(torch.max(attn_logprob))
 
         total_loss = 0.0
 
@@ -95,9 +96,9 @@ class ForwardSumLoss(nn.Module):
                                  target_seq,
                                  input_lengths=spectrogram_lens[bid: bid + 1],
                                  target_lengths=text_lens[bid: bid + 1])
-            total_loss = total_loss + loss
+            total_loss += loss
         # average cost over batch
-        total_loss = total_loss / attn_logprob.shape[0]
+        total_loss /= attn_logprob.shape[0]
         return total_loss
 
 
@@ -174,11 +175,11 @@ class AlignmentLoss(nn.Module):
     """
 
     def __init__(self,
-                 bin_warmup_steps=10000,
-                 bin_start_steps=60000,
-                 forward_start_steps=10000,
-                 include_forward_loss=False,  # something doesn't work right, causes stalling, disabled until figured out.
-                 forward_loss_weight=0.01):
+                 bin_warmup_steps=20000,
+                 bin_start_steps=40000,
+                 forward_start_steps=500,
+                 forward_warmup_steps=500,
+                 include_forward_loss=False):
         super().__init__()
         if include_forward_loss:
             self.l_forward_func = ForwardSumLoss()
@@ -187,16 +188,18 @@ class AlignmentLoss(nn.Module):
         self.bin_warmup_steps = bin_warmup_steps
         self.bin_start_steps = bin_start_steps
         self.forward_start_steps = forward_start_steps
-        self.forward_loss_weight = forward_loss_weight
+        self.forward_warmup_steps = forward_warmup_steps
+        # in our implementation we need to give the diagonal prior objective some time before we start with the forward sum objective
 
     def forward(self, soft_attention, in_lens, out_lens, step):
 
         soft_attention = soft_attention.unsqueeze(1)
 
-        bin_weight = min(((step - self.bin_start_steps) / self.bin_warmup_steps) / 100, 0.01)
+        bin_weight = min(((step - self.bin_start_steps) / self.bin_warmup_steps) / 10, 0.1)
+        forward_weight = min(((step - self.forward_start_steps) / self.forward_start_steps) / 2, 0.5)
 
         if self.include_forward_loss and self.forward_start_steps < step:
-            l_forward = self.l_forward_func(torch.log(soft_attention), in_lens, out_lens) * self.forward_loss_weight
+            l_forward = forward_weight * self.l_forward_func(torch.log(soft_attention), in_lens, out_lens)
         else:
             l_forward = 0.0
 

@@ -23,7 +23,7 @@ class Phone2VecTextFrontend:
                  # with such information would help.
                  use_lexical_stress=False,
                  silent=True,
-                 allow_unknown=True,
+                 allow_unknown=False,
                  inference=False,
                  strip_silence=True):
         """
@@ -119,7 +119,7 @@ class Phone2VecTextFrontend:
         turns graphemes into phonemes and then vectorizes
         the sequence as articulatory features
         """
-        phones = self.get_phone_string(text=text, include_eos_symbol=True)
+        phones = self.get_phone_string(text=text, include_eos_symbol=False)
         if view:
             print("Phonemes: \n{}\n".format(phones))
         phones_vector = list()

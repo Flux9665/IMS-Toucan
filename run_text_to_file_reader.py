@@ -60,3 +60,4 @@ if __name__ == '__main__':
                sentence=["Hello world, I am a synthesis voice."],
                device=exec_device,
                filename="audios/fast_nancy.wav")
+    read_harvard_sentences(model_id="taco_nancy", device=exec_device)

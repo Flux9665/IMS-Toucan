@@ -20,8 +20,30 @@ def load_net_taco(path):
 
 def load_net_fast(path):
     check_dict = torch.load(path, map_location=torch.device("cpu"))
-    net = FastSpeech2()
+    net = FastSpeech2(idim=idim, odim=odim, spk_embed_dim=None)
+    try:
+        net.load_state_dict(check_dict["model"])
+    except RuntimeError:
+        net = FastSpeech2(idim=idim, odim=odim, spk_embed_dim=None, legacy_model=True)
+        net.load_state_dict(check_dict["model"])
+    return net
+
+
+def load_net_taco_multi(path, idim=166, odim=80):
+    check_dict = torch.load(path, map_location=torch.device("cpu"))
+    net = Tacotron2(idim=idim, odim=odim, spk_embed_dim=960)
     net.load_state_dict(check_dict["model"])
+    return net
+
+
+def load_net_fast_multi(path, idim=166, odim=80):
+    check_dict = torch.load(path, map_location=torch.device("cpu"))
+    net = FastSpeech2(idim=idim, odim=odim, spk_embed_dim=960)
+    try:
+        net.load_state_dict(check_dict["model"])
+    except RuntimeError:
+        net = FastSpeech2(idim=idim, odim=odim, spk_embed_dim=960, legacy_model=True)
+        net.load_state_dict(check_dict["model"])
     return net
 
 
@@ -90,11 +112,17 @@ def make_best_in_all(n=3):
             save_model_for_use(model=averaged_model, name="Models/{}/best.pt".format(model_dir), dict_name="generator")
         elif "Tacotron2" in model_dir:
             checkpoint_paths = get_n_recent_checkpoints_paths(checkpoint_dir="Models/{}".format(model_dir), n=n)
-            averaged_model = average_checkpoints(checkpoint_paths, load_func=load_net_taco)
+            if "LibriTTS" in model_dir or "Multi" in model_dir:
+                averaged_model = average_checkpoints(checkpoint_paths, load_func=load_net_taco_multi)
+            else:
+                averaged_model = average_checkpoints(checkpoint_paths, load_func=load_net_taco)
             save_model_for_use(model=averaged_model, name="Models/{}/best.pt".format(model_dir))
         elif "FastSpeech2" in model_dir:
             checkpoint_paths = get_n_recent_checkpoints_paths(checkpoint_dir="Models/{}".format(model_dir), n=n)
-            averaged_model = average_checkpoints(checkpoint_paths, load_func=load_net_fast)
+            if "LibriTTS" in model_dir or "Multi" in model_dir:
+                averaged_model = average_checkpoints(checkpoint_paths, load_func=load_net_fast_multi)
+            else:
+                averaged_model = average_checkpoints(checkpoint_paths, load_func=load_net_fast)
             save_model_for_use(model=averaged_model, name="Models/{}/best.pt".format(model_dir))
 
 

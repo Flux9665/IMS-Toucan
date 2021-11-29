@@ -19,7 +19,7 @@ def run(gpu_id, resume_checkpoint, finetune, model_dir, resume):
         os.environ["CUDA_VISIBLE_DEVICES"] = "{}".format(gpu_id)
         device = torch.device("cuda")
 
-    torch.manual_seed(131714)
+    torch.manual_seed(131714)  # tbh I just like this number
     random.seed(131714)
     torch.random.manual_seed(131714)
 
@@ -40,7 +40,7 @@ def run(gpu_id, resume_checkpoint, finetune, model_dir, resume):
                                 cache_dir=cache_dir,
                                 lang="en")
 
-    model = Tacotron2()
+    model = Tacotron2(idim=384, odim=80, spk_embed_dim=None, use_dtw_loss=False, use_alignment_loss=True)
 
     print("Training model")
     train_loop(net=model,
@@ -48,8 +48,9 @@ def run(gpu_id, resume_checkpoint, finetune, model_dir, resume):
                device=device,
                save_directory=save_dir,
                steps=100000,
-               batch_size=20,
+               batch_size=84,  # this works for a 24GB GPU. For a smaller GPU, consider decreasing batchsize.
                epochs_per_save=1,
+               use_speaker_embedding=False,
                lang="en",
                lr=0.001,
                path_to_checkpoint=resume_checkpoint,

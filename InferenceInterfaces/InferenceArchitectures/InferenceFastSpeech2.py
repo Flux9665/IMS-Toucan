@@ -91,8 +91,12 @@ class FastSpeech2(torch.nn.Module, ABC):
                                  concat_after=encoder_concat_after,
                                  positionwise_conv_kernel_size=positionwise_conv_kernel_size,
                                  macaron_style=use_macaron_style_in_conformer,
-                                 use_cnn_module=use_cnn_in_conformer,
-                                 cnn_module_kernel=conformer_enc_kernel_size)
+                                 use_cnn_module=use_cnn_in_conformer, cnn_module_kernel=conformer_enc_kernel_size, legacy_model=legacy_model)
+        if spk_embed_dim is not None:
+            self.hs_emb_projection = torch.nn.Linear(adim + 256, adim)
+            # embedding projection derived from https://arxiv.org/pdf/1705.08947.pdf
+            self.embedding_projection = torch.nn.Sequential(torch.nn.Linear(spk_embed_dim, 256),
+                                                            torch.nn.Softsign())
         self.duration_predictor = DurationPredictor(idim=adim, n_layers=duration_predictor_layers,
                                                     n_chans=duration_predictor_chans,
                                                     kernel_size=duration_predictor_kernel_size,
@@ -201,6 +205,14 @@ class FastSpeech2(torch.nn.Module, ABC):
         if return_duration_pitch_energy:
             return after_outs[0], d_outs[0], pitch_predictions[0], energy_predictions[0]
         return after_outs[0]
+
+    def _integrate_with_spk_embed(self, hs, speaker_embeddings):
+        # project speaker embedding into smaller space that allows tuning
+        speaker_embeddings_projected = self.embedding_projection(speaker_embeddings)
+        # concat hidden states with spk embeds and then apply projection
+        speaker_embeddings_expanded = F.normalize(speaker_embeddings_projected).unsqueeze(1).expand(-1, hs.size(1), -1)
+        hs = self.hs_emb_projection(torch.cat([hs, speaker_embeddings_expanded], dim=-1))
+        return hs
 
     def _source_mask(self, ilens):
         x_masks = make_non_pad_mask(ilens).to(next(self.parameters()).device)

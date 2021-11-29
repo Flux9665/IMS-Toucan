@@ -21,11 +21,6 @@ class DurationCalculator(torch.nn.Module):
         duration = self._calculate_duration(att_ws, vis=vis)
         return duration
 
-    @staticmethod
-    def _calculate_focus_rate(att_ws):
-        # transformer case -> (#layers, #heads, L, T)
-        return att_ws.max(dim=-1)[0].mean(dim=-1).max()
-
     def _calculate_duration(self, att_ws, vis):
         if vis is not None:
             plt.figure(figsize=(8, 4))

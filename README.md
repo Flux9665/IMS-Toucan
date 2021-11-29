@@ -16,7 +16,7 @@ the TransformerTTS and MelGAN branch. They are separated to keep the code clean,
 ## Demonstration
 
 [Here are two sentences](https://drive.google.com/file/d/1ltAyR2EwAbmDo2hgkx1mvUny4FuxYmru/view?usp=sharing)
-produced by Tacotron 2 combined with HiFi-GAN, trained on
+produced by Tacotron 2 combined with HiFi-GAN, trained on 
 [Nancy Krebs](https://www.cstr.ed.ac.uk/projects/blizzard/2011/lessac_blizzard2011/) using this toolkit.
 
 [Here is some speech](https://drive.google.com/file/d/1mZ1LvTlY6pJ5ZQ4UXZ9jbzB651mufBrB/view?usp=sharing)
@@ -32,9 +32,8 @@ produced by a multi-speaker FastSpeech 2 with MelGAN trained on
 [LibriTTS](https://research.google/tools/datasets/libri-tts/) using this toolkit. Fans of the videogame Portal may
 recognize who was used as the reference speaker for this utterance.
 
-[Interactive Demo of our entry to the Blizzard Challenge 2021.](https://colab.research.google.com/drive/1bRaySf8U55MRPaxqBr8huWrzCOzlxVqw)
-This is based on an older version of the toolkit though. It uses FastSpeech2 and MelGAN as vocoder and is trained on 5
-hours of Spanish.
+[Interactive Demo of our entry to the Blizzard Challenge 2021.](https://colab.research.google.com/drive/1bRaySf8U55MRPaxqBr8huWrzCOzlxVqw) This is based on an older version of the toolkit though. It uses FastSpeech2 and MelGAN as vocoder and is trained on 5 hours of Spanish.
+
 
 ---
 
@@ -59,13 +58,14 @@ pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f ht
 
 #### Speaker Embedding
 
-As [NVIDIA has shown](https://arxiv.org/pdf/2110.05798.pdf), you get better results by fine-tuning a pretrained model on
-a new speaker, rather than training a multispeaker model. We have thus dropped support for zero-shot multispeaker models
-using speaker embeddings. However we still
-use [Speechbrain's ECAPA-TDNN](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb) for a cycle consistency loss to
-make adapting to new speakers a bit faster.
+If you want to use multi-speaker synthesis, you will need a speaker embedding function. IMS Toucan uses three such 
+functions as an ensemble.
 
-In the current version of the toolkit no further action should be required. When you are using multispeaker for the
+- [dvector](https://github.com/yistLin/dvector) 
+- [Speechbrain's ECAPA-TDNN](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb)
+- [Speechbrain's X-Vector](https://huggingface.co/speechbrain/spkrec-xvect-voxceleb)
+
+In the current version of the toolkit no further action should be required. When you are using multispeaker for the 
 first time, it requires an internet connection to download the pretrained models though.
 
 #### espeak-ng

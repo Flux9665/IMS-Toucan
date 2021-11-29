@@ -28,7 +28,6 @@ munkres==1.1.4
 numba==0.54.0
 numpy==1.20.3
 packaging==21.0
-panphon==0.19
 phonemizer==2.2.2
 Pillow==8.3.2
 pooch==1.5.1
@@ -61,5 +60,4 @@ uritemplate==3.0.1
 urllib3==1.26.6
 wcwidth==0.2.5
 speechbrain==0.5.10
-gdown
 unsilence

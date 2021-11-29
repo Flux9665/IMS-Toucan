@@ -1,31 +1,34 @@
 import argparse
 import sys
 
-from TrainingInterfaces.TrainingPipelines.FastSpeech2_MetaCheckpoint import run as meta_fast
-from TrainingInterfaces.TrainingPipelines.FastSpeech2_Nancy import run as fast_nancy
+from TrainingInterfaces.TrainingPipelines.FastSpeech2_LJSpeech import run as fast_LJSpeech
+from TrainingInterfaces.TrainingPipelines.FastSpeech2_LibriTTS import run as fast_LibriTTS
+from TrainingInterfaces.TrainingPipelines.FastSpeech2_Nancy import run as fast_Nancy
+from TrainingInterfaces.TrainingPipelines.FastSpeech2_Thorsten import run as fast_Thorsten
 from TrainingInterfaces.TrainingPipelines.HiFiGAN_combined import run as hifigan_combined
-from TrainingInterfaces.TrainingPipelines.Tacotron2_MetaCheckpoint_first_order_maml import run as meta_taco_fo
-from TrainingInterfaces.TrainingPipelines.Tacotron2_MetaCheckpoint_single_step_maml import run as meta_taco_ss
-from TrainingInterfaces.TrainingPipelines.Tacotron2_Nancy import run as taco_nancy
-from TrainingInterfaces.TrainingPipelines.Tacotron2_SingleSpeakerFinetuneDifferentLang import run as taco_dif
-from TrainingInterfaces.TrainingPipelines.Tacotron2_SingleSpeakerFinetuneSameLang import run as taco_same
-from TrainingInterfaces.TrainingPipelines.create_teachers import run as create_teachers
+from TrainingInterfaces.TrainingPipelines.Tacotron2_Cycle import run as taco_cycle
+from TrainingInterfaces.TrainingPipelines.Tacotron2_LJSpeech import run as taco_LJSpeech
+from TrainingInterfaces.TrainingPipelines.Tacotron2_LibriTTS import run as taco_LibriTTS
+from TrainingInterfaces.TrainingPipelines.Tacotron2_MultiEnglish import run as taco_multi
+from TrainingInterfaces.TrainingPipelines.Tacotron2_Nancy import run as taco_Nancy
+from TrainingInterfaces.TrainingPipelines.Tacotron2_Thorsten import run as taco_Thorsten
 
 pipeline_dict = {
-    "fast_nancy": fast_nancy,
-    "taco_nancy": taco_nancy,
+    "fast_thorsten": fast_Thorsten,
+    "taco_thorsten": taco_Thorsten,
+
+    "fast_libri": fast_LibriTTS,
+    "taco_libri": taco_LibriTTS,
+
+    "fast_lj": fast_LJSpeech,
+    "taco_lj": taco_LJSpeech,
+
+    "fast_nancy": fast_Nancy,
+    "taco_nancy": taco_Nancy,
 
     "hifi_combined": hifigan_combined,
-
-    "taco_meta_ss": meta_taco_ss,
-    "taco_meta_fo": meta_taco_fo,
-
-    "create_teachers": create_teachers,
-
-    "fast_meta": meta_fast,
-
-    "taco_same": taco_same,
-    "taco_dif": taco_dif
+    "taco_multi": taco_multi,
+    "taco_cycle": taco_cycle
 }
 
 if __name__ == '__main__':

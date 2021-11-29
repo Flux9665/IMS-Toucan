@@ -20,20 +20,26 @@ class FastSpeechDataset(Dataset):
                  acoustic_checkpoint_path,
                  cache_dir,
                  lang,
+                 speaker_embedding=False,
                  loading_processes=6,
                  min_len_in_seconds=1,
                  max_len_in_seconds=20,
                  cut_silence=False,
                  reduction_factor=1,
                  device=torch.device("cpu"),
-                 rebuild_cache=False):
+                 rebuild_cache=False,
+                 return_language_id=False):
+
+        self.speaker_embedding = speaker_embedding
 
         if not os.path.exists(os.path.join(cache_dir, "fast_train_cache.pt")) or rebuild_cache:
             if not os.path.exists(os.path.join(cache_dir, "taco_train_cache.pt")) or rebuild_cache:
                 TacotronDataset(path_to_transcript_dict=path_to_transcript_dict,
                                 cache_dir=cache_dir,
                                 lang=lang,
+                                speaker_embedding=speaker_embedding,
                                 loading_processes=loading_processes,
+                                device=device,
                                 min_len_in_seconds=min_len_in_seconds,
                                 max_len_in_seconds=max_len_in_seconds,
                                 cut_silences=cut_silence,
@@ -44,7 +50,9 @@ class FastSpeechDataset(Dataset):
                 TacotronDataset(path_to_transcript_dict=path_to_transcript_dict,
                                 cache_dir=cache_dir,
                                 lang=lang,
+                                speaker_embedding=speaker_embedding,
                                 loading_processes=loading_processes,
+                                device=device,
                                 min_len_in_seconds=min_len_in_seconds,
                                 max_len_in_seconds=max_len_in_seconds,
                                 cut_silences=cut_silence,
@@ -56,39 +64,40 @@ class FastSpeechDataset(Dataset):
             # build cache
             print("... building dataset cache ...")
             self.datapoints = list()
-            self.pop_ids = list()
-
-            acoustic_model.load_state_dict(torch.load(acoustic_checkpoint_path, map_location='cpu')["model"])
 
             self.cache_builder_process(dataset,
                                        norm_waves,
                                        acoustic_model,
                                        reduction_factor,
                                        device,
+                                       speaker_embedding,
                                        cache_dir,
                                        1)
-
-            print(f"Removing the following IDs to get a cleaner Tacotron Dataset: {self.pop_ids}")
-            while len(self.pop_ids) > 0:
-                pop_id = self.pop_ids.pop()
-                dataset.pop(pop_id)
-                norm_waves.pop(pop_id)
-            os.rename(os.path.join(cache_dir, "taco_train_cache.pt"), os.path.join(cache_dir, "taco_train_cache_unclean.pt"))
-            torch.save((dataset, norm_waves), os.path.join(cache_dir, "taco_train_cache.pt"))
 
             tensored_datapoints = list()
             # we had to turn all of the tensors to numpy arrays to avoid shared memory
             # issues. Now that the multi-processing is over, we can convert them back
             # to tensors to save on conversions in the future.
             print("Converting into convenient format...")
-            for datapoint in tqdm(self.datapoints):
-                tensored_datapoints.append([datapoint[0],
-                                            datapoint[1],
-                                            datapoint[2],
-                                            datapoint[3],
-                                            torch.LongTensor(datapoint[4]),  # durations
-                                            torch.Tensor(datapoint[5]),  # energy
-                                            torch.Tensor(datapoint[6])])  # pitch
+            if self.speaker_embedding:
+                for datapoint in tqdm(self.datapoints):
+                    tensored_datapoints.append([datapoint[0],
+                                                datapoint[1],
+                                                datapoint[2],
+                                                datapoint[3],
+                                                torch.LongTensor(datapoint[4]),  # durations
+                                                torch.Tensor(datapoint[5]),  # energy
+                                                torch.Tensor(datapoint[6]),  # pitch
+                                                datapoint[7]])  # speaker embedding
+            else:
+                for datapoint in tqdm(self.datapoints):
+                    tensored_datapoints.append([datapoint[0],
+                                                datapoint[1],
+                                                datapoint[2],
+                                                datapoint[3],
+                                                torch.LongTensor(datapoint[4]),  # durations
+                                                torch.Tensor(datapoint[5]),  # energy
+                                                torch.Tensor(datapoint[6])])  # pitch
             self.datapoints = tensored_datapoints
             # save to cache
             if len(self.datapoints) > 0:
@@ -109,6 +118,7 @@ class FastSpeechDataset(Dataset):
                               acoustic_model,
                               reduction_factor,
                               device,
+                              use_speaker_embedding,
                               cache_dir,
                               process_id):
         process_internal_dataset_chunk = list()
@@ -128,14 +138,22 @@ class FastSpeechDataset(Dataset):
             melspec = datapoint_list[index][2]
             melspec_length = datapoint_list[index][3]
 
-            attention_map = acoustic_model.inference(text_tensor=text.to(device),
-                                                     speech_tensor=melspec.to(device),
-                                                     use_teacher_forcing=True)[2]
-            cached_duration = dc(attention_map, vis=None).cpu()
+            if not use_speaker_embedding:
+                attention_map = acoustic_model.inference(text_tensor=text.to(device),
+                                                         speech_tensor=melspec.to(device),
+                                                         use_teacher_forcing=True,
+                                                         speaker_embeddings=None)[2]
+                cached_duration = dc(attention_map, vis=None).cpu()
+            else:
+                speaker_embedding = datapoint_list[index][4]
+                attention_map = acoustic_model.inference(text_tensor=text.to(device),
+                                                         speech_tensor=melspec.to(device),
+                                                         use_teacher_forcing=True,
+                                                         speaker_embeddings=speaker_embedding.to(device))[2]
+                cached_duration = dc(attention_map, vis=None).cpu()
 
             if np.count_nonzero(cached_duration.numpy() == 0) > 4:
                 # here we figure out whether the attention map makes any sense or whether it failed.
-                self.pop_ids.append(index)
                 continue
             # if it didn't fail, we can use viterbi to refine the path and then calculate the durations again.
             # not the most efficient method, but it is the safest I can think of and I like safety over speed here.
@@ -154,14 +172,23 @@ class FastSpeechDataset(Dataset):
                                feats_lengths=melspec_length,
                                durations=cached_duration.unsqueeze(0),
                                durations_lengths=torch.LongTensor([len(cached_duration)]))[0].squeeze(0).cpu().numpy()
-            process_internal_dataset_chunk.append([datapoint_list[index][0],
-                                                   datapoint_list[index][1],
-                                                   datapoint_list[index][2],
-                                                   datapoint_list[index][3],
-                                                   cached_duration.cpu().numpy(),
-                                                   cached_energy,
-                                                   cached_pitch])
-
+            if not self.speaker_embedding:
+                process_internal_dataset_chunk.append([datapoint_list[index][0],
+                                                       datapoint_list[index][1],
+                                                       datapoint_list[index][2],
+                                                       datapoint_list[index][3],
+                                                       cached_duration.cpu().numpy(),
+                                                       cached_energy,
+                                                       cached_pitch])
+            else:
+                process_internal_dataset_chunk.append([datapoint_list[index][0],
+                                                       datapoint_list[index][1],
+                                                       datapoint_list[index][2],
+                                                       datapoint_list[index][3],
+                                                       cached_duration.cpu().numpy(),
+                                                       cached_energy,
+                                                       cached_pitch,
+                                                       datapoint_list[index][4]])
         self.datapoints += process_internal_dataset_chunk
 
     def __getitem__(self, index):
