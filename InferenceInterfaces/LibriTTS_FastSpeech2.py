@@ -8,7 +8,7 @@ import torch
 
 from InferenceInterfaces.InferenceArchitectures.InferenceFastSpeech2 import FastSpeech2
 from InferenceInterfaces.InferenceArchitectures.InferenceHiFiGAN import HiFiGANGenerator
-from Preprocessing.TextFrontend import TextFrontend
+from Preprocessing.Phone2VecTextFrontend import Phone2VecTextFrontend
 
 
 class LibriTTS_FastSpeech2(torch.nn.Module):
@@ -22,7 +22,7 @@ class LibriTTS_FastSpeech2(torch.nn.Module):
         else:
             self.speaker_embedding = torch.load(os.path.join("Models", "SpeakerEmbedding", speaker_embedding), map_location='cpu').to(torch.device(device)).squeeze(0).squeeze(0)
 
-        self.text2phone = TextFrontend(language="en", use_word_boundaries=False,
+        self.text2phone = Phone2VecTextFrontend(language="en", use_word_boundaries=False,
                                        use_explicit_eos=False, inference=True)
         try:
             self.phone2mel = FastSpeech2(path_to_weights=os.path.join("Models", "FastSpeech2_LibriTTS", "best.pt"),

@@ -8,7 +8,7 @@ import torch
 
 from InferenceInterfaces.InferenceArchitectures.InferenceHiFiGAN import HiFiGANGenerator
 from InferenceInterfaces.InferenceArchitectures.InferenceTacotron2 import Tacotron2
-from Preprocessing.TextFrontend import TextFrontend
+from Preprocessing.Phone2VecTextFrontend import Phone2VecTextFrontend
 
 
 class MultiEnglish_Tacotron2(torch.nn.Module):
@@ -21,7 +21,7 @@ class MultiEnglish_Tacotron2(torch.nn.Module):
             self.speaker_embedding = speaker_embedding
         else:
             self.speaker_embedding = torch.load(os.path.join("Models", "SpeakerEmbedding", speaker_embedding), map_location='cpu').to(torch.device(device)).squeeze(0).squeeze(0)
-        self.text2phone = TextFrontend(language="en", use_word_boundaries=False,
+        self.text2phone = Phone2VecTextFrontend(language="en", use_word_boundaries=False,
                                        use_explicit_eos=False, inference=True)
         self.phone2mel = Tacotron2(path_to_weights=os.path.join("Models", "Tacotron2_MultispeakerEnglish", "best.pt"),
                                    idim=166, odim=80, spk_embed_dim=960, reduction_factor=1).to(torch.device(device))

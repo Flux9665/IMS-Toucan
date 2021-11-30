@@ -120,7 +120,7 @@ class TacotronDataset(Dataset):
 
     def cache_builder_process(self, path_list, speaker_embedding, lang, min_len, max_len, cut_silences, remove_all_silences, cache_dir):
         process_internal_dataset_chunk = list()
-        tf = TextFrontend(language=lang)
+        tf = Phone2VecTextFrontend(language=lang)
         _, sr = sf.read(path_list[0])
         ap = AudioPreprocessor(input_sr=sr, output_sr=16000, melspec_buckets=80, hop_length=256, n_fft=1024, cut_silence=cut_silences)
         if remove_all_silences:

@@ -5,6 +5,7 @@ Taken from ESPNet
 from abc import ABC
 
 import torch
+import torch.nn.functional as F
 
 from Layers.Conformer import Conformer
 from Layers.DurationPredictor import DurationPredictor
@@ -36,8 +37,8 @@ class FastSpeech2(torch.nn.Module, ABC):
 
     def __init__(self,
                  # network structure related
-                 idim=66,
-                 odim=80,
+                 idim,
+                 odim,
                  adim=384,
                  aheads=4,
                  elayers=6,
@@ -72,7 +73,7 @@ class FastSpeech2(torch.nn.Module, ABC):
                  energy_predictor_dropout=0.5,
                  energy_embed_kernel_size=1,
                  energy_embed_dropout=0.0,
-                 stop_gradient_from_energy_predictor=False,
+                 stop_gradient_from_energy_predictor=True,
                  # pitch predictor
                  pitch_predictor_layers=5,
                  pitch_predictor_chans=256,
@@ -81,6 +82,8 @@ class FastSpeech2(torch.nn.Module, ABC):
                  pitch_embed_kernel_size=1,
                  pitch_embed_dropout=0.0,
                  stop_gradient_from_pitch_predictor=True,
+                 # pretrained spk emb
+                 spk_embed_dim=None,
                  # training related
                  transformer_enc_dropout_rate=0.2,
                  transformer_enc_positional_dropout_rate=0.2,
@@ -110,13 +113,15 @@ class FastSpeech2(torch.nn.Module, ABC):
         self.stop_gradient_from_pitch_predictor = stop_gradient_from_pitch_predictor
         self.stop_gradient_from_energy_predictor = stop_gradient_from_energy_predictor
         self.use_scaled_pos_enc = use_scaled_pos_enc
+        self.spk_embed_dim = spk_embed_dim
+
+        # use idx 0 as padding idx
+        self.padding_idx = 0
 
         # define encoder
-        embed = torch.nn.Sequential(torch.nn.Linear(idim, 100),
-                                    torch.nn.Tanh(),
-                                    torch.nn.Linear(100, adim))
+        encoder_input_layer = torch.nn.Embedding(num_embeddings=idim, embedding_dim=adim, padding_idx=self.padding_idx)
         self.encoder = Conformer(idim=idim, attention_dim=adim, attention_heads=aheads, linear_units=eunits, num_blocks=elayers,
-                                 input_layer=embed, dropout_rate=transformer_enc_dropout_rate,
+                                 input_layer=encoder_input_layer, dropout_rate=transformer_enc_dropout_rate,
                                  positional_dropout_rate=transformer_enc_positional_dropout_rate, attention_dropout_rate=transformer_enc_attn_dropout_rate,
                                  normalize_before=encoder_normalize_before, concat_after=encoder_concat_after,
                                  positionwise_conv_kernel_size=positionwise_conv_kernel_size, macaron_style=use_macaron_style_in_conformer,
@@ -157,14 +162,15 @@ class FastSpeech2(torch.nn.Module, ABC):
                                  dropout_rate=transformer_dec_dropout_rate, positional_dropout_rate=transformer_dec_positional_dropout_rate,
                                  attention_dropout_rate=transformer_dec_attn_dropout_rate, normalize_before=decoder_normalize_before,
                                  concat_after=decoder_concat_after, positionwise_conv_kernel_size=positionwise_conv_kernel_size,
-                                 macaron_style=use_macaron_style_in_conformer, use_cnn_module=use_cnn_in_conformer, cnn_module_kernel=conformer_dec_kernel_size)
+                                 macaron_style=use_macaron_style_in_conformer, use_cnn_module=use_cnn_in_conformer, cnn_module_kernel=conformer_dec_kernel_size,
+                                 legacy_model=legacy_model)
 
         # define final projection
         self.feat_out = torch.nn.Linear(adim, odim * reduction_factor)
 
         # define postnet
         self.postnet = PostNet(idim=idim, odim=odim, n_layers=postnet_layers, n_chans=postnet_chans, n_filts=postnet_filts, use_batch_norm=use_batch_norm,
-                               dropout_rate=postnet_dropout_rate)
+                               dropout_rate=postnet_dropout_rate, legacy_model=legacy_model)
 
         # initialize parameters
         self._reset_parameters(init_type=init_type, init_enc_alpha=init_enc_alpha, init_dec_alpha=init_dec_alpha)
@@ -174,43 +180,56 @@ class FastSpeech2(torch.nn.Module, ABC):
         if self.use_dtw_loss:
             self.dtw_criterion = SoftDTW(use_cuda=True, gamma=0.1)
 
-    def forward(self,
-                text_tensors,
+    def forward(self, text_tensors,
                 text_lengths,
                 gold_speech,
                 speech_lengths,
                 gold_durations,
                 gold_pitch,
                 gold_energy,
-                return_mels=False):
+                speaker_embeddings=None):
         """
         Calculate forward propagation.
 
         Args:
-            return_mels: whether to return the predicted spectrogram
             text_tensors (LongTensor): Batch of padded text vectors (B, Tmax).
             text_lengths (LongTensor): Batch of lengths of each input (B,).
             gold_speech (Tensor): Batch of padded target features (B, Lmax, odim).
             speech_lengths (LongTensor): Batch of the lengths of each target (B,).
             gold_durations (LongTensor): Batch of padded durations (B, Tmax + 1).
+            durations_lengths (LongTensor): Batch of duration lengths (B, Tmax + 1).
             gold_pitch (Tensor): Batch of padded token-averaged pitch (B, Tmax + 1, 1).
+            pitch_lengths (LongTensor): Batch of pitch lengths (B, Tmax + 1).
             gold_energy (Tensor): Batch of padded token-averaged energy (B, Tmax + 1, 1).
+            energy_lengths (LongTensor): Batch of energy lengths (B, Tmax + 1).
+            speaker_embeddings (Tensor, optional): Batch of speaker embeddings (B, spk_embed_dim).
 
         Returns:
             Tensor: Loss scalar value.
             Dict: Statistics to be monitored.
             Tensor: Weight value.
         """
-        # Texts include EOS token from the teacher model already in this version
+        text_tensors = text_tensors[:, : text_lengths.max()]  # for data-parallel
+        gold_speech = gold_speech[:, : speech_lengths.max()]  # for data-parallel
+        gold_durations = gold_durations[:, : text_lengths.max() + 1]  # for data-parallel
+        gold_pitch = gold_pitch[:, : text_lengths.max() + 1]  # for data-parallel
+        gold_energy = gold_energy[:, : text_lengths.max() + 1]  # for data-parallel
 
-        print("Forward pass begun")
+        # Texts don't have the stop token in them because they are freshly made,
+        # but all of the other stuff is based on the teacher model, which already
+        # produces outputs for the stop token. So durations, pitch end energies all
+        # have one more element than the text.
+
+        # And now we add the missing EOS token also to the text.
+        text_tensors_including_eos = F.pad(text_tensors, [0, 1], "constant", self.padding_idx)
+        for i, l in enumerate(text_lengths):
+            text_tensors_including_eos[i, l] = self.eos
+        text_lengths_including_eos = text_lengths + 1
 
         # forward propagation
-        before_outs, after_outs, d_outs, p_outs, e_outs = self._forward(text_tensors, text_lengths, gold_speech, speech_lengths,
-                                                                        gold_durations, gold_pitch, gold_energy,
+        before_outs, after_outs, d_outs, p_outs, e_outs = self._forward(text_tensors_including_eos, text_lengths_including_eos, gold_speech, speech_lengths,
+                                                                        gold_durations, gold_pitch, gold_energy, speaker_embeddings=speaker_embeddings,
                                                                         is_inference=False)
-
-        print("_forward successful")
 
         # modify mod part of groundtruth (speaking pace)
         if self.reduction_factor > 1:
@@ -219,47 +238,39 @@ class FastSpeech2(torch.nn.Module, ABC):
         # calculate loss
         l1_loss, duration_loss, pitch_loss, energy_loss = self.criterion(after_outs=after_outs, before_outs=before_outs, d_outs=d_outs, p_outs=p_outs,
                                                                          e_outs=e_outs, ys=gold_speech, ds=gold_durations, ps=gold_pitch, es=gold_energy,
-                                                                         ilens=text_lengths, olens=speech_lengths)
+                                                                         ilens=text_lengths_including_eos, olens=speech_lengths)
         loss = l1_loss + duration_loss + pitch_loss + energy_loss
 
         if self.use_dtw_loss:
             # print("Regular Loss: {}".format(loss))
             dtw_loss = self.dtw_criterion(after_outs, gold_speech).mean() / 2000.0  # division to balance orders of magnitude
             # print("DTW Loss: {}".format(dtw_loss))
-            loss = loss + dtw_loss
+            loss += dtw_loss
 
-        if return_mels:
-            return loss, after_outs
         return loss
 
     def _forward(self, text_tensors, text_lens, gold_speech=None, speech_lens=None,
-                 gold_durations=None, gold_pitch=None, gold_energy=None,
+                 gold_durations=None, gold_pitch=None, gold_energy=None, speaker_embeddings=None,
                  is_inference=False, alpha=1.0):
         # forward encoder
         text_masks = self._source_mask(text_lens)
-
-        print("masked")
-
         encoded_texts, _ = self.encoder(text_tensors, text_masks)  # (B, Tmax, adim)
 
-        print("encoded")
+        # integrate speaker embedding
+        if self.spk_embed_dim is not None:
+            encoded_texts = self._integrate_with_spk_embed(encoded_texts, speaker_embeddings)
 
         # forward duration predictor and variance predictors
-        d_masks = make_pad_mask(text_lens, device=text_tensors.device)
+        d_masks = make_pad_mask(text_lens).to(text_tensors.device)
 
         if self.stop_gradient_from_pitch_predictor:
             pitch_predictions = self.pitch_predictor(encoded_texts.detach(), d_masks.unsqueeze(-1))
         else:
             pitch_predictions = self.pitch_predictor(encoded_texts, d_masks.unsqueeze(-1))
-
-        print("pitched")
-
         if self.stop_gradient_from_energy_predictor:
             energy_predictions = self.energy_predictor(encoded_texts.detach(), d_masks.unsqueeze(-1))
         else:
             energy_predictions = self.energy_predictor(encoded_texts, d_masks.unsqueeze(-1))
-
-        print("energized")
 
         if is_inference:
             d_outs = self.duration_predictor.inference(encoded_texts, d_masks)  # (B, Tmax)
@@ -270,16 +281,11 @@ class FastSpeech2(torch.nn.Module, ABC):
             encoded_texts = self.length_regulator(encoded_texts, d_outs, alpha)  # (B, Lmax, adim)
         else:
             d_outs = self.duration_predictor(encoded_texts, d_masks)
-
-            print("durationed")
-
             # use groundtruth in training
             p_embs = self.pitch_embed(gold_pitch.transpose(1, 2)).transpose(1, 2)
             e_embs = self.energy_embed(gold_energy.transpose(1, 2)).transpose(1, 2)
             encoded_texts = encoded_texts + e_embs + p_embs
             encoded_texts = self.length_regulator(encoded_texts, gold_durations)  # (B, Lmax, adim)
-
-            print("length regulated")
 
         # forward decoder
         if speech_lens is not None and not is_inference:
@@ -298,21 +304,15 @@ class FastSpeech2(torch.nn.Module, ABC):
 
         return before_outs, after_outs, d_outs, pitch_predictions, energy_predictions
 
-    def inference(self,
-                  text,
-                  speech=None,
-                  durations=None,
-                  pitch=None,
-                  energy=None,
-                  alpha=1.0,
-                  use_teacher_forcing=False,
-                  return_duration_pitch_energy=False):
+    def inference(self, text, speech=None, speaker_embeddings=None, durations=None,
+                  pitch=None, energy=None, alpha=1.0, use_teacher_forcing=False, return_duration_pitch_energy=False):
         """
         Generate the sequence of features given the sequences of characters.
 
         Args:
             text (LongTensor): Input sequence of characters (T,).
             speech (Tensor, optional): Feature sequence to extract style (N, idim).
+            speaker_embeddings (Tensor, optional): Speaker embedding vector (spk_embed_dim,).
             durations (LongTensor, optional): Groundtruth of duration (T + 1,).
             pitch (Tensor, optional): Groundtruth of token-averaged pitch (T + 1, 1).
             energy (Tensor, optional): Groundtruth of token-averaged energy (T + 1, 1).
@@ -327,13 +327,15 @@ class FastSpeech2(torch.nn.Module, ABC):
         """
         self.eval()
         x, y = text, speech
-        d, p, e = durations, pitch, energy
+        speaker_embedding, d, p, e = speaker_embeddings, durations, pitch, energy
 
         # setup batch axis
         ilens = torch.tensor([x.shape[0]], dtype=torch.long, device=x.device)
         xs, ys = x.unsqueeze(0), None
         if y is not None:
             ys = y.unsqueeze(0)
+        if speaker_embedding is not None:
+            speaker_embeddings = speaker_embedding.unsqueeze(0)
 
         if use_teacher_forcing:
             # use groundtruth of duration, pitch, and energy
@@ -343,11 +345,13 @@ class FastSpeech2(torch.nn.Module, ABC):
                                                                                                    ys,
                                                                                                    gold_durations=ds,
                                                                                                    gold_pitch=ps,
-                                                                                                   gold_energy=es)  # (1, L, odim)
+                                                                                                   gold_energy=es,
+                                                                                                   speaker_embeddings=speaker_embeddings)  # (1, L, odim)
         else:
             before_outs, after_outs, d_outs, pitch_predictions, energy_predictions = self._forward(xs,
                                                                                                    ilens,
                                                                                                    ys,
+                                                                                                   speaker_embeddings=speaker_embeddings,
                                                                                                    is_inference=True,
                                                                                                    alpha=alpha)  # (1, L, odim)
         self.train()
@@ -386,7 +390,7 @@ class FastSpeech2(torch.nn.Module, ABC):
             Tensor: Mask tensor for self-attention.
 
         """
-        x_masks = make_non_pad_mask(ilens, device=ilens.device)
+        x_masks = make_non_pad_mask(ilens).to(ilens.device)
         return x_masks.unsqueeze(-2)
 
     def _reset_parameters(self, init_type, init_enc_alpha, init_dec_alpha):

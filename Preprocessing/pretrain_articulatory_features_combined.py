@@ -2,7 +2,7 @@ import json
 
 import torch
 
-from ArticulatoryCombinedTextFrontend import ArticulatoryCombinedTextFrontend
+from Preprocessing.ArticulatoryCombinedTextFrontend import ArticulatoryCombinedTextFrontend
 
 
 def pretrain_512_dim():

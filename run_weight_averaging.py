@@ -11,14 +11,14 @@ from TrainingInterfaces.Text_to_Spectrogram.FastSpeech2.FastSpeech2 import FastS
 from TrainingInterfaces.Text_to_Spectrogram.Tacotron2.Tacotron2 import Tacotron2
 
 
-def load_net_taco(path):
+def load_net_taco(path, idim=166, odim=80):
     check_dict = torch.load(path, map_location=torch.device("cpu"))
-    net = Tacotron2()
+    net = Tacotron2(idim=idim, odim=odim, spk_embed_dim=None)
     net.load_state_dict(check_dict["model"])
     return net
 
 
-def load_net_fast(path):
+def load_net_fast(path, idim=166, odim=80):
     check_dict = torch.load(path, map_location=torch.device("cpu"))
     net = FastSpeech2(idim=idim, odim=odim, spk_embed_dim=None)
     try:
@@ -126,17 +126,5 @@ def make_best_in_all(n=3):
             save_model_for_use(model=averaged_model, name="Models/{}/best.pt".format(model_dir))
 
 
-def count_parameters(net):
-    return sum(p.numel() for p in net.parameters() if p.requires_grad)
-
-
-def show_all_models_params():
-    from TrainingInterfaces.Text_to_Spectrogram.Tacotron2.Tacotron2 import Tacotron2
-    from TrainingInterfaces.Text_to_Spectrogram.FastSpeech2.FastSpeech2 import FastSpeech2
-    print("Number of (trainable) Parameters in Tacotron2: {}".format(count_parameters(Tacotron2())))
-    print("Number of (trainable) Parameters in FastSpeech2: {}".format(count_parameters(FastSpeech2())))
-
-
 if __name__ == '__main__':
-    # show_all_models_params()
     make_best_in_all(n=5)

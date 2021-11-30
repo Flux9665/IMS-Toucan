@@ -1,4 +1,3 @@
-import json
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -42,8 +41,8 @@ if __name__ == '__main__':
     key_list = list()  # no matter where you get it from, this needs to be a list of the phonemes you want to visualize as string
     embedding_list = list()  # in the same order as the phonemes in the list above, this list needs to be filled with their embedding vectors
 
-    #word_vectors = KeyedVectors.load('Preprocessing/embedding_pretrained_phone2vec_en_384_dim.kv')
-    word_vectors = KeyedVectors.load('/mount/arbeitsdaten/dialog-1/kochja/projects/Phone-Embeddings/Models/384_dim_gum.kv')
+    word_vectors = KeyedVectors.load('Preprocessing/Pretrained/en_gum_384.kv')
+    #word_vectors = KeyedVectors.load('/mount/arbeitsdaten/dialog-1/kochja/projects/Phone-Embeddings/Models/384_dim_gum.kv')
 
 
     #for key in datapoints:

@@ -41,7 +41,7 @@ class Phone2VecTextFrontend:
             self.clean_lang = "en"
             self.g2p_lang = "en-us"
             self.expand_abbreviations = english_text_expansion
-            self.embedding_path = "Preprocessing/embedding_pretrained_phone2vec_en_384_dim.kv"
+            self.embedding_path = "Preprocessing/Pretrained/en_gum_384.kv"
             if not silent:
                 print("Created an English Text-Frontend")
 
