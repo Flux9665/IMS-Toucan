@@ -53,7 +53,7 @@ if __name__ == '__main__':
                                 max_len_in_seconds=70,
                                 lang="de",
                                 device='cpu',
-                                rebuild_cache=True)
+                                rebuild_cache=False)
 
     # sentences = ["""  Der Sommer.
     #             Die Tage gehn vorbei mit sanfter Lüfte Rauschen,
@@ -97,11 +97,11 @@ if __name__ == '__main__':
 
     read_texts(model_id="fast_karlsson",
                sentence=sentences,
-               dur_list=None,
+               dur_list=durations,
                pitch_list=pitch,
-               energy_list=None,
+               energy_list=energy,
                device='cpu',
-               filename="audios/sommer_dur.wav")
+               filename="audios/sommer_dur_pitch_en.wav")
     
     # read_texts(model_id="fast_karlsson",
     #            sentence="Die Tage gehn vorbei mit sanfter Lüfte Rauschen,",

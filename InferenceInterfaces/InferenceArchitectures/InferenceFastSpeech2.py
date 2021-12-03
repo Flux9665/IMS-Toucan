@@ -168,9 +168,9 @@ class FastSpeech2(torch.nn.Module, ABC):
             else:
                 d_outs = self.duration_predictor.inference(hs, d_masks)
             if ps is not None:
-                p_outs = ps
+                p_outs = ps.unsqueeze(0)
             if es is not None:
-                e_outs = es
+                e_outs = es.unsqueeze(0)
             p_embs = self.pitch_embed(p_outs.transpose(1, 2)).transpose(1, 2)
             e_embs = self.energy_embed(e_outs.transpose(1, 2)).transpose(1, 2)       
             hs = hs + e_embs + p_embs
