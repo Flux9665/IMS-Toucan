@@ -161,10 +161,18 @@ class FastSpeech2(torch.nn.Module, ABC):
             e_outs = self.energy_predictor(hs.detach(), d_masks.unsqueeze(-1))
         else:
             e_outs = self.energy_predictor(hs, d_masks.unsqueeze(-1))
+
         if is_inference:
-            d_outs = self.duration_predictor.inference(hs, d_masks)
+            if ds is not None:
+                d_outs = ds 
+            else:
+                d_outs = self.duration_predictor.inference(hs, d_masks)
+            if ps is not None:
+                p_outs = ps
+            if es is not None:
+                e_outs = es
             p_embs = self.pitch_embed(p_outs.transpose(1, 2)).transpose(1, 2)
-            e_embs = self.energy_embed(e_outs.transpose(1, 2)).transpose(1, 2)
+            e_embs = self.energy_embed(e_outs.transpose(1, 2)).transpose(1, 2)       
             hs = hs + e_embs + p_embs
             hs = self.length_regulator(hs, d_outs, alpha)
         else:
@@ -186,7 +194,7 @@ class FastSpeech2(torch.nn.Module, ABC):
         after_outs = before_outs + self.postnet(before_outs.transpose(1, 2)).transpose(1, 2)
         return before_outs, after_outs, d_outs, p_outs, e_outs
 
-    def forward(self, text, alpha=1.0, return_duration_pitch_energy=False):
+    def forward(self, text, alpha=1.0, return_duration_pitch_energy=False, ds=None, ps=None, es=None):
         self.eval()
         x = text
         ilens = torch.tensor([x.shape[0]], dtype=torch.long, device=x.device)
@@ -196,7 +204,10 @@ class FastSpeech2(torch.nn.Module, ABC):
                                                                                                ilens,
                                                                                                None,
                                                                                                is_inference=True,
-                                                                                               alpha=alpha)
+                                                                                               alpha=alpha,
+                                                                                               ds=ds,
+                                                                                               ps=ps,
+                                                                                               es=es)
         self.train()
         if return_duration_pitch_energy:
             return after_outs[0], d_outs[0], pitch_predictions[0], energy_predictions[0]

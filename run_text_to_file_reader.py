@@ -13,11 +13,11 @@ tts_dict = {
     }
 
 
-def read_texts(model_id, sentence, filename, device="cpu"):
+def read_texts(model_id, sentence, filename, device="cpu", dur_list=[], pitch_list=[], energy_list=[]):
     tts = tts_dict[model_id](device=device)
     if type(sentence) == str:
         sentence = [sentence]
-    tts.read_to_file(text_list=sentence, file_location=filename)
+    tts.read_to_file(text_list=sentence, file_location=filename, dur_list=dur_list, pitch_list=pitch_list, energy_list=energy_list)
     del tts
 
 
@@ -51,6 +51,7 @@ if __name__ == '__main__':
     if not os.path.isdir("audios"):
         os.makedirs("audios")
 
+            
     read_texts(model_id="fast_karlsson",
                sentence=[
                    "Einst stritten sich Nordwind und Sonne, wer von ihnen beiden wohl der Stärkere wäre, als ein Wanderer, der in einen warmen Mantel gehüllt war, des Weges daherkam."],

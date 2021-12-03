@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import sounddevice
 import soundfile
 import torch
+import itertools
 
 from InferenceInterfaces.InferenceArchitectures.InferenceFastSpeech2 import FastSpeech2
 from InferenceInterfaces.InferenceArchitectures.InferenceHiFiGAN import HiFiGANGenerator
@@ -23,10 +24,10 @@ class Karlsson_FastSpeech2(torch.nn.Module):
         self.mel2wav.eval()
         self.to(torch.device(device))
 
-    def forward(self, text, view=False):
+    def forward(self, text, view=False, ds=None, ps=None, es=None):
         with torch.no_grad():
             phones = self.text2phone.string_to_tensor(text).to(torch.device(self.device))
-            mel, durations, pitch, energy = self.phone2mel(phones, return_duration_pitch_energy=True)
+            mel, durations, pitch, energy = self.phone2mel(phones, return_duration_pitch_energy=True, ds=ds, ps=ps, es=es)
             mel = mel.transpose(0, 1)
             wave = self.mel2wav(mel)
         if view:
@@ -52,7 +53,7 @@ class Karlsson_FastSpeech2(torch.nn.Module):
             plt.show()
         return wave
 
-    def read_to_file(self, text_list, file_location, silent=False):
+    def read_to_file(self, text_list, file_location, silent=False, dur_list=None, pitch_list=None, energy_list=None):
         """
         :param silent: Whether to be verbose about the process
         :param text_list: A list of strings to be read
@@ -60,22 +61,28 @@ class Karlsson_FastSpeech2(torch.nn.Module):
         """
         wav = None
         silence = torch.zeros([24000])
-        for text in text_list:
+        if not dur_list:
+            dur_list = []
+        if not pitch_list:
+            pitch_list = []
+        if not energy_list:
+            energy_list = []
+        for (text, durations, pitch, energy) in itertools.zip_longest(text_list, dur_list, pitch_list, energy_list):
             if text.strip() != "":
                 if not silent:
                     print("Now synthesizing: {}".format(text))
                 if wav is None:
-                    wav = self(text).cpu()
+                    wav = self(text, ds=durations, ps=pitch, es=energy).cpu()
                     wav = torch.cat((wav, silence), 0)
                 else:
-                    wav = torch.cat((wav, self(text).cpu()), 0)
+                    wav = torch.cat((wav, self(text, ds=durations, ps=pitch, es=energy).cpu()), 0)
                     wav = torch.cat((wav, silence), 0)
         soundfile.write(file=file_location, data=wav.cpu().numpy(), samplerate=48000)
 
-    def read_aloud(self, text, view=False, blocking=False):
+    def read_aloud(self, text, view=False, blocking=False, durations=None, pitch=None, energy=None):
         if text.strip() == "":
             return
-        wav = self(text, view).cpu()
+        wav = self(text, view, durations, pitch, energy).cpu()
         wav = torch.cat((wav, torch.zeros([24000])), 0)
         if not blocking:
             sounddevice.play(wav.numpy(), samplerate=48000)

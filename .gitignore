@@ -10,7 +10,6 @@ Models
 *.wav
 audios/notes.txt
 audios/
-*playground*
 apex/
 pretrained_models/
 *.json
