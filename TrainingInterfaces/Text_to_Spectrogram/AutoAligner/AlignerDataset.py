@@ -28,8 +28,6 @@ class AlignerDataset(Dataset):
                  include_priors=False):
         self.include_priors = include_priors
         self.tf = ArticulatoryCombinedTextFrontend(language=lang, use_word_boundaries=True)
-        os.makedirs(os.path.join(cache_dir, "normalized_audios"), exist_ok=True)
-        os.makedirs(os.path.join(cache_dir, "normalized_unsilenced_audios"), exist_ok=True)
         if not os.path.exists(os.path.join(cache_dir, "aligner_train_cache.pt")) or rebuild_cache:
             resource_manager = Manager()
             self.path_to_transcript_dict = resource_manager.dict(path_to_transcript_dict)
@@ -112,7 +110,6 @@ class AlignerDataset(Dataset):
         tf = ArticulatoryCombinedTextFrontend(language=lang)
         _, sr = sf.read(path_list[0])
         ap = AudioPreprocessor(input_sr=sr, output_sr=16000, melspec_buckets=80, hop_length=256, n_fft=1024, cut_silence=cut_silences)
-        # the unsilence tool unfortunately writes files with a sample rate that we cannot control, so we need special cases
 
         for path in tqdm(path_list):
             if self.path_to_transcript_dict[path].strip() == "":
