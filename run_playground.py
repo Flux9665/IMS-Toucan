@@ -23,12 +23,15 @@ def sort_dataset(text_list, dataset):
     for text in text_list:
         text_vector = tf.string_to_tensor(text, handle_missing=False).squeeze(0).cpu()
         # print(len(text_vector))
-        
+        found_datapoint = False
         for datapoint in dataset:
             if torch.equal(datapoint[0],text_vector):
                 sorted_dataset.append(datapoint)
+                found_datapoint = True
                 # print('found sentence ', str(i))
                 break
+        if not found_datapoint:
+            print("WARNING: No matching datapoint found")
     return sorted_dataset
         
 
@@ -76,36 +79,15 @@ if __name__ == '__main__':
                 "Wenn sich der Mensch zu diesem Sinn gefunden."]
 
     sorted_dataset = sort_dataset(sentences, dataset)
-    
-    # print('durations dataset')
-    # for datapoint in sorted_dataset: print(datapoint[4], '\n')
 
-    _, _, _ , _, durations, pitch, energy = list(zip(*sorted_dataset))
+    _, _, _ , _, durations, energy, pitch = list(zip(*sorted_dataset))
 
-    # durations = [datapoint[4] for datapoint in sorted_dataset]
-    # pitch = [datapoint[5] for datapoint in sorted_dataset]
-    # energy = [datapoint[6] for datapoint in sorted_dataset]
-    # print('text\n', text)
-    # print('after zip:')
-    # for d in durations: print(d, '\n')
-    # print('pitch\n', pitch)
-    # print('energy\n', energy)
-
-    # print(durations[0])
-    # print(pitch[0])
-    # print(energy[0])
 
     read_texts(model_id="fast_karlsson",
                sentence=sentences,
-               dur_list=durations,
-               pitch_list=pitch,
+               dur_list=None,
+               pitch_list=None,
                energy_list=energy,
                device='cpu',
-               filename="audios/sommer_dur_pitch_en.wav")
+               filename="audios/sommer_energy.wav")
     
-    # read_texts(model_id="fast_karlsson",
-    #            sentence="Die Tage gehn vorbei mit sanfter Lüfte Rauschen,",
-    #            pitch_list=[pitch[0]],
-    #            device='cpu',
-    #            filename="audios/sommer_01_p.wav",
-    #           )
