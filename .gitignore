@@ -16,3 +16,4 @@ pretrained_models/
 .tmp/
 .vscode/
 split/
+create_transcripts.py

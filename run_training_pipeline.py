@@ -3,6 +3,7 @@ import sys
 
 from TrainingInterfaces.TrainingPipelines.FastSpeech2_Eva import run as fast_eva
 from TrainingInterfaces.TrainingPipelines.FastSpeech2_Karlsson import run as fast_karlsson
+from TrainingInterfaces.TrainingPipelines.FastSpeech2_Zischler import run as fast_zischler
 from TrainingInterfaces.TrainingPipelines.FastSpeech2_MetaCheckpoint import run as meta_fast
 from TrainingInterfaces.TrainingPipelines.FastSpeech2_Nancy import run as fast_nancy
 from TrainingInterfaces.TrainingPipelines.HiFiGAN_combined import run as hifigan_combined
@@ -13,6 +14,7 @@ pipeline_dict = {
     "fast_meta"    : meta_fast,
     "fast_eva"     : fast_eva,
     "fast_karlsson": fast_karlsson,
+    "fast_zischler": fast_zischler,
     "hifi_combined": hifigan_combined,
     "aligner"      : aligner,
     }

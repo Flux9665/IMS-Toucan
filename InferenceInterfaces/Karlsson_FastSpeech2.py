@@ -53,6 +53,13 @@ class Karlsson_FastSpeech2(torch.nn.Module):
             plt.show()
         return wave
 
+    def predict_prosody(self, text, view=False):
+        with torch.no_grad():
+            phones = self.text2phone.string_to_tensor(text).to(torch.device(self.device))
+            mel, durations, pitch, energy = self.phone2mel(phones, return_duration_pitch_energy=True)
+            return durations, pitch, energy
+
+
     def read_to_file(self, text_list, file_location, silent=False, dur_list=None, pitch_list=None, energy_list=None):
         """
         :param silent: Whether to be verbose about the process
