@@ -53,10 +53,13 @@ class Karlsson_FastSpeech2(torch.nn.Module):
             plt.show()
         return wave
 
-    def predict_prosody(self, text, view=False):
+    def predict_prosody(self, text, view=False, show_phones=False):
         with torch.no_grad():
             phones = self.text2phone.string_to_tensor(text).to(torch.device(self.device))
             mel, durations, pitch, energy = self.phone2mel(phones, return_duration_pitch_energy=True)
+            if show_phones:
+                phone_string = self.text2phone.get_phone_string(text)
+                return phone_string, durations, pitch, energy
             return durations, pitch, energy
 
 
