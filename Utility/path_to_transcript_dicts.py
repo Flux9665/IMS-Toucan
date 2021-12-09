@@ -1,16 +1,29 @@
 import os
-from collections import OrderedDict
+
+def build_path_to_transcript_dict_zischler():
+    root = "/mount/arbeitsdaten/textklang/synthesis/Zischler/Synthesis_Data"
+    path_to_transcript = dict()
+    for el in os.listdir(root):
+        if os.path.isdir(os.path.join(root, el)):
+            with open(os.path.join(root, el, "transcript.txt"), "r", encoding="utf8") as file:
+                lookup = file.read()
+            for line in lookup.split("\n"):
+                if line.strip() != "":
+                    norm_transcript = line.split("\t")[1]
+                    wav_path = os.path.join(root, el, line.split("\t")[0] + ".wav")
+                    if os.path.exists(wav_path):
+                        path_to_transcript[wav_path] = norm_transcript
+    return path_to_transcript
 
 def build_path_to_transcript_dict_sommer():
-    root = "/mount/arbeitsdaten/textklang/synthesis/data/Sommer/"
+    root = "/mount/arbeitsdaten/textklang/synthesis/Zischler/Synthesis_Data/Der_Sommer/"
     path_to_transcript = dict()
-    # path_to_transcript = OrderedDict()
-    with open(os.path.join(root, "transcripts.txt"), "r", encoding="utf8") as file:
+    with open(os.path.join(root, "transcript.txt"), "r", encoding="utf8") as file:
         lookup = file.read()
     for line in lookup.split("\n"):
         if line.strip() != "":
             norm_transcript = line.split("\t")[1]
-            wav_path = os.path.join(root, "wavs", line.split("\t")[0] + ".wav")
+            wav_path = os.path.join(root, line.split("\t")[0] + ".wav")
             if os.path.exists(wav_path):
                 path_to_transcript[wav_path] = norm_transcript
     return path_to_transcript
