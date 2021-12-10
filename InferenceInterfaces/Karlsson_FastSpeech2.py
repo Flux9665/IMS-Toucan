@@ -78,7 +78,6 @@ class Karlsson_FastSpeech2(torch.nn.Module):
         if not energy_list:
             energy_list = []
         for (text, durations, pitch, energy) in itertools.zip_longest(text_list, dur_list, pitch_list, energy_list):
-            print(text, "\n", durations)
             if text.strip() != "":
                 if not silent:
                     print("Now synthesizing: {}".format(text))

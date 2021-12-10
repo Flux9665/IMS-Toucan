@@ -146,7 +146,7 @@ if __name__ == '__main__':
     #            device='cpu',
     #            filename=f"audios/test.wav")
     
-    poem = "Der_Sommer"
+    poem = "Der_Fruehling"
     text_list, dur_list, pitch_list, en_list = extract_prosody_from_poem(poem)
 
     read_texts(model_id="fast_karlsson",
