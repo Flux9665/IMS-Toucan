@@ -2,11 +2,18 @@ import os
 import soundfile as sf
 import torch
 from tqdm import tqdm
+from argparse import ArgumentParser
 
 from Preprocessing.ArticulatoryCombinedTextFrontend import ArticulatoryCombinedTextFrontend
 from Preprocessing.AudioPreprocessor import AudioPreprocessor
 from TrainingInterfaces.Text_to_Spectrogram.AutoAligner.Aligner import Aligner
 from TrainingInterfaces.Text_to_Spectrogram.FastSpeech2.DurationCalculator import DurationCalculator
+
+parser = ArgumentParser()
+parser.add_argument('--poem',
+                    type=str,
+                    help="Name of the poem to split")
+args = parser.parse_args()
 
 # loading modules
 acoustic_model = Aligner()
@@ -16,7 +23,7 @@ tf = ArticulatoryCombinedTextFrontend(language="de")
 
 #root = "/projekte/textklang/Primary-Data/Hoelderlin/txt-und-wavs/Zischler"
 root = "/mount/arbeitsdaten/textklang/synthesis/Zischler"
-poem_name = 'Der_Sommer'
+poem_name = args.poem
 
 audio_path = os.path.join(root, 'Primary_Data', 'Zischler_Hoelderlin_' + poem_name + '.wav')
 transcript_path = os.path.join(root, 'Primary_Data' ,'Zischler_Hoelderlin_' + poem_name + '-text.txt')
