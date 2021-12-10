@@ -50,7 +50,7 @@ def extract_prosody_from_poem(poem):
 
     for index, text in enumerate(text_list):
         ref = os.path.join(root, poem, f'segment_{index}.wav')
-        print(ref, "\t", text)
+        # print(ref, "\t", text)
         duration, pitch, energy = extract_prosody(text, ref, acoustic_model, dio, energy_calc, dc)
         dur_list.append(duration)
         pitch_list.append(pitch)
@@ -108,9 +108,11 @@ def extract_prosody(transcript, ref_audio, acoustic_model, dio, energy_calc, dc)
                         feats_lengths=melspec_length,
                         durations=duration.unsqueeze(0),
                         durations_lengths=torch.LongTensor([len(duration)]))[0].squeeze(0).cpu()
-    phones = tf.get_phone_string(transcript)
-    print(phones)
-    print(len(phones), " ", len(duration), " ", len(pitch), " ", len(energy))
+
+    print("len melspec: ", melspec_length, "\tduration: ", sum(duration))
+    # phones = tf.get_phone_string(transcript)
+    # print(phones)
+    # print(len(phones), " ", len(duration), " ", len(pitch), " ", len(energy))
     return duration, pitch, energy
         
 
@@ -121,47 +123,37 @@ if __name__ == '__main__':
     if not os.path.isdir("audios"):
         os.makedirs("audios")
 
-    # sentences = ["Der Sommer",
-    #             "Die Tage gehn vorbei mit sanfter Lüfte Rauschen,",
-    #             "Wenn mit der Wolke sie der Felder Pracht vertauschen,",
-    #             "Des Tales Ende trifft der Berge Dämmerungen,",
-    #             "Dort, wo des Stromes Wellen sich hinabgeschlungen.",
-    #             "Der Wälder Schatten sieht umhergebreitet,",
-    #             "Wo auch der Bach entfernt hinuntergleitet,",
-    #             "Und sichtbar ist der Ferne Bild in Stunden,",
-    #             "Wenn sich der Mensch zu diesem Sinn gefunden.",
-    #             "den vierundzwanzigsten Mai siebzehnhundertachtundfünfzig.",
-    #             "Scardanelli."]
-    
-    # root = "/mount/arbeitsdaten/textklang/synthesis/Zischler/Synthesis_Data/"
-    # poem = "Der_Sommer"
-    # i = 10
-    # transcript = sentences[i]
-    # ref = os.path.join(root, poem, f'segment_{i}.wav')
-    # text, duration, pitch, energy = extract_prosody(transcript, ref)
-
-    # print(duration)
-    # text = [text]
-    # durations = [duration]
-    # pitch = [pitch]
-    # energy = [energy]
-
+    # text_1 = "Einst stritten sich Nordwind und Sonne"
+    # text_2 = "Wer von ihnen beiden wohl der stärkere wäre"
     # tts = tts_dict["fast_karlsson"](device='cpu')
-    # phones, d_outs, p_outs, e_outs = tts.predict_prosody(transcript, show_phones=True)
-    # d_outs[0] = 50
+    # phones_1, d_outs_1, p_outs_1, e_outs_1 = tts.predict_prosody(text_1, show_phones=True)
+    # phones_2, d_outs_2, p_outs_2, e_outs_2 = tts.predict_prosody(text_2, show_phones=True)
+    
+    # texts = [text_1, text_2]
+    # d_outs = [d_outs_1, d_outs_2]
+    # # d_outs[0] = 50
     # d_outs = torch.add(d_outs, 2)
     # p_outs = torch.add(p_outs, 1)
     # e_outs = torch.add(e_outs, 1)
-    # print(phones, "\n", d_outs, "\n", p_outs, "\n", e_outs)
+    # print(phones, "\n", d_outs) #, "\n", p_outs, "\n", e_outs)
+    # print('sum durations: ', sum(d_outs))
+    # read_texts(model_id="fast_karlsson",
+    #            sentence=texts,
+    #            dur_list=d_outs,
+    #            #dur_list=None,
+    #            pitch_list=None,
+    #            energy_list=None,
+    #            device='cpu',
+    #            filename=f"audios/test.wav")
     
     poem = "Der_Sommer"
     text_list, dur_list, pitch_list, en_list = extract_prosody_from_poem(poem)
-    
+
     read_texts(model_id="fast_karlsson",
                sentence=text_list,
                dur_list=dur_list,
                pitch_list=pitch_list,
                energy_list=en_list,
                device='cpu',
-               filename=f"audios/sommer_dur.wav")
+               filename=f"audios/{poem}.wav")
     
