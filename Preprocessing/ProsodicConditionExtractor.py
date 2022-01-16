@@ -16,8 +16,8 @@ class ProsodicConditionExtractor:
         self.dio = Dio(reduction_factor=1, fs=16000, use_token_averaged_f0=False)
         self.energy_calc = EnergyCalculator(reduction_factor=1, fs=16000, use_token_averaged_energy=False)
         self.ap = AudioPreprocessor(input_sr=sr, output_sr=16000, melspec_buckets=80, hop_length=256, n_fft=1024, cut_silence=False)
-        # https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb
-        self.speaker_embedding_func = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb",
+        # https://huggingface.co/speechbrain/spkrec-xvect-voxceleb
+        self.speaker_embedding_func = EncoderClassifier.from_hparams(source="speechbrain/spkrec-xvect-voxceleb",
                                                                      run_opts={"device": str(device)},
                                                                      savedir="Models/SpeakerEmbedding/speechbrain_speaker_embedding_ecapa")
         # https://huggingface.co/speechbrain/lang-id-voxlingua107-ecapa
