@@ -15,19 +15,6 @@ def build_path_to_transcript_dict_zischler():
                         path_to_transcript[wav_path] = norm_transcript
     return path_to_transcript
 
-def build_path_to_transcript_dict_sommer():
-    root = "/mount/arbeitsdaten/textklang/synthesis/Zischler/Synthesis_Data/Der_Sommer/"
-    path_to_transcript = dict()
-    with open(os.path.join(root, "transcript.txt"), "r", encoding="utf8") as file:
-        lookup = file.read()
-    for line in lookup.split("\n"):
-        if line.strip() != "":
-            norm_transcript = line.split("\t")[1]
-            wav_path = os.path.join(root, line.split("\t")[0] + ".wav")
-            if os.path.exists(wav_path):
-                path_to_transcript[wav_path] = norm_transcript
-    return path_to_transcript
-
 def build_path_to_transcript_dict_karlsson():
     """
     https://arxiv.org/abs/2106.06309
