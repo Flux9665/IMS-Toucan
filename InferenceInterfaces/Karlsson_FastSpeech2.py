@@ -53,14 +53,12 @@ class Karlsson_FastSpeech2(torch.nn.Module):
             plt.show()
         return wave
 
-    def predict_prosody(self, text, view=False, show_phones=False):
+    def predict_prosody(self, text, view=False):
         with torch.no_grad():
             phones = self.text2phone.string_to_tensor(text).to(torch.device(self.device))
             mel, durations, pitch, energy = self.phone2mel(phones, return_duration_pitch_energy=True)
-            if show_phones:
-                phone_string = self.text2phone.get_phone_string(text)
-                return phone_string, durations, pitch, energy
-            return durations, pitch, energy
+            phone_string = self.text2phone.get_phone_string(text)
+            return phone_string, durations, pitch, energy
 
 
     def read_to_file(self, text_list, file_location, silent=False, dur_list=None, pitch_list=None, energy_list=None):
@@ -77,7 +75,7 @@ class Karlsson_FastSpeech2(torch.nn.Module):
             pitch_list = []
         if not energy_list:
             energy_list = []
-        for (text, durations, pitch, energy) in itertools.zip_longest(text_list, dur_list, pitch_list, energy_list):
+        for (text, durations, pitch, energy) in itertools.zip_longest(text_list, dur_list, pitch_list, energy_list): # TODO: check that lists match
             if text.strip() != "":
                 if not silent:
                     print("Now synthesizing: {}".format(text))

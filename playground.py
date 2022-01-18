@@ -1,5 +1,7 @@
 import os
 import soundfile as sf
+from numpy import trim_zeros
+from torchaudio.transforms import Vad as VoiceActivityDetection
 import torch
 from tqdm import tqdm
 from argparse import ArgumentParser
@@ -20,13 +22,14 @@ acoustic_model = Aligner()
 acoustic_model.load_state_dict(torch.load("Models/Aligner/aligner.pt", map_location='cpu')["asr_model"])
 dc = DurationCalculator(reduction_factor=1)
 tf = ArticulatoryCombinedTextFrontend(language="de")
+vad = VoiceActivityDetection(sample_rate=16000, trigger_time=0.0001, trigger_level=3.0, pre_trigger_time=0.2)
 
 #root = "/projekte/textklang/Primary-Data/Hoelderlin/txt-und-wavs/Zischler"
 root = "/mount/arbeitsdaten/textklang/synthesis/Zischler"
 poem_name = args.poem
 
-audio_path = os.path.join(root, 'Primary_Data', 'Zischler_Hoelderlin_' + poem_name + '.wav')
-transcript_path = os.path.join(root, 'Primary_Data' ,'Zischler_Hoelderlin_' + poem_name + '-text.txt')
+audio_path = os.path.join(root, 'Primary_Data', 'Zischler_' + poem_name + '.wav')
+transcript_path = os.path.join(root, 'Primary_Data' ,'Zischler_' + poem_name + '-text.txt')
 out_dir = os.path.join(root, 'Synthesis_Data', poem_name)
 os.makedirs(out_dir, exist_ok=True)
 
@@ -73,16 +76,10 @@ for i, _ in enumerate(ensemble_of_durations[0]):
 
 # cut audio according to duration sum of each line in transcript
 line_lens = [len(x) for x in lines]
-segment_durations = list()
 index = 0
-for line_index, num_phones in enumerate(line_lens):
-    if line_index == 0:
-        segment_durations.append(durations[0])  # to catch the pause at the beginning
-        segment_durations.append(sum(durations[index: index + num_phones - 2]))  # all of the phonemes
-        segment_durations.append(durations[index + num_phones - 2])  # to catch the pause at the end
-    else:
-        segment_durations.append(sum(durations[index: index + num_phones - 1]))  # all of the phonemes
-        segment_durations.append(durations[index + num_phones - 1])  # to catch the pause at the end
+segment_durations = list()
+for num_phones in line_lens:
+    segment_durations.append(sum(durations[index: index + num_phones]))
     index += num_phones
 spec_to_wave_factor = len(norm_wave) / sum(segment_durations)
 wave_segment_lens = [int(x * spec_to_wave_factor) for x in segment_durations]
@@ -96,8 +93,12 @@ for index, segment_len in enumerate(wave_segment_lens):
         start_index += segment_len
 
 # write the segments into new files
-i = 0
 for f, wave_segment in enumerate(wave_segments):
-    if f % 2 != 0:
-        sf.write(os.path.join(out_dir, f"segment_{i}.wav"), wave_segment.numpy(), 16000)
-        i += 1
+    silence = torch.zeros([40000])
+    no_silence_front = vad(torch.cat((silence, torch.Tensor(wave_segment), silence), 0))
+    reversed_audio = torch.flip(no_silence_front, (0,))
+    no_silence_back = vad(torch.Tensor(reversed_audio))
+    unreversed_audio = torch.flip(no_silence_back, (0,))
+    sf.write(os.path.join(out_dir, f"segment_{f}.wav"), trim_zeros(unreversed_audio.numpy()), 16000)
+    
+        
