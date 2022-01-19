@@ -26,10 +26,13 @@ vad = VoiceActivityDetection(sample_rate=16000, trigger_time=0.0001, trigger_lev
 
 #root = "/projekte/textklang/Primary-Data/Hoelderlin/txt-und-wavs/Zischler"
 root = "/mount/arbeitsdaten/textklang/synthesis/Zischler"
+root = "/mount/arbeitsdaten/textklang/synthesis"
 poem_name = args.poem
 
-audio_path = os.path.join(root, 'Primary_Data', 'Zischler_' + poem_name + '.wav')
-transcript_path = os.path.join(root, 'Primary_Data' ,'Zischler_' + poem_name + '-text.txt')
+# audio_path = os.path.join(root, 'Primary_Data', 'Zischler_' + poem_name + '.wav')
+# transcript_path = os.path.join(root, 'Primary_Data' ,'Zischler_' + poem_name + '-text.txt')
+audio_path = os.path.join(root, poem_name + '.wav')
+transcript_path = os.path.join(root, poem_name + '-text.txt')
 out_dir = os.path.join(root, 'Synthesis_Data', poem_name)
 os.makedirs(out_dir, exist_ok=True)
 

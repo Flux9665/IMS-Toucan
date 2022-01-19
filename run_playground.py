@@ -3,7 +3,7 @@ import sys
 
 import torch
 import soundfile as sf
-from numpy import trim_zeros
+from numpy import pi, trim_zeros
 
 from InferenceInterfaces.Karlsson_FastSpeech2 import Karlsson_FastSpeech2
 
@@ -28,7 +28,8 @@ exec_device = 'cpu'
 
 def extract_prosody_from_poem(poem):
 
-    root = "/mount/arbeitsdaten/textklang/synthesis/Zischler/Synthesis_Data/"
+    # root = "/mount/arbeitsdaten/textklang/synthesis/Zischler/Synthesis_Data/"
+    root = "/mount/arbeitsdaten/textklang/synthesis/Synthesis_Data/"
 
     device = exec_device
     acoustic_model = Aligner()
@@ -125,75 +126,113 @@ if __name__ == '__main__':
     if not os.path.isdir("audios"):
         os.makedirs("audios")
 
+
+
     #exec_device = "cuda" if torch.cuda.is_available() else "cpu"
-    acoustic_model = Aligner()
-    acoustic_checkpoint_path = os.path.join("Models", "FastSpeech2_Zischler", "aligner", "aligner.pt")
-    acoustic_model.load_state_dict(torch.load(acoustic_checkpoint_path, map_location='cpu')["asr_model"])
+    # acoustic_model = Aligner()
+    # acoustic_checkpoint_path = os.path.join("Models", "FastSpeech2_Zischler", "aligner", "aligner.pt")
+    # acoustic_model.load_state_dict(torch.load(acoustic_checkpoint_path, map_location='cpu')["asr_model"])
 
 
-    acoustic_model = acoustic_model.to('cpu')
-    dio = Dio(reduction_factor=1, fs=16000)
-    energy_calc = EnergyCalculator(reduction_factor=1, fs=16000)
-    dc = DurationCalculator(reduction_factor=1)
+    # acoustic_model = acoustic_model.to('cpu')
+    # dio = Dio(reduction_factor=1, fs=16000)
+    # energy_calc = EnergyCalculator(reduction_factor=1, fs=16000)
+    # dc = DurationCalculator(reduction_factor=1)
 
-    text = "Die Tage gehn vorbei mit sanfter Lüfte Rauschen,"
-    d_gold, p_gold, e_gold = extract_prosody(text, "/mount/arbeitsdaten/textklang/synthesis/Zischler/Synthesis_Data/Der_Sommer/segment_1.wav", acoustic_model, dio, energy_calc, dc)
+    # text = "Die Tage gehn vorbei mit sanfter Lüfte Rauschen,"
+    # d_gold, p_gold, e_gold = extract_prosody(text, "/mount/arbeitsdaten/textklang/synthesis/Zischler/Synthesis_Data/Der_Sommer/segment_1.wav", acoustic_model, dio, energy_calc, dc)
 
-    tts = tts_dict["fast_karlsson"](device='cpu')
-    phones, d_pred, p_pred, e_pred = tts.predict_prosody(text)
+    # tts = tts_dict["fast_karlsson"](device='cpu')
+    # phones, d_pred, p_pred, e_pred = tts.predict_prosody(text)
 
-    print("d_gold: ", p_gold.shape, "\td_pred: ", p_pred.shape)
-    print('d_pred type: ', type(d_pred))
-    print(d_pred)
-    print(d_gold)
+    # print("d_gold: ", p_gold.shape, "\td_pred: ", p_pred.shape)
+    # print('d_pred type: ', type(d_pred))
+    # print(d_pred)
+    # print(d_gold)
 
-    w_gold = 0.8
-    w_pred = 1 - w_gold
+    # w_gold = 0.8
+    # w_pred = 1 - w_gold
 
-    d_gold = d_gold * w_gold
-    p_gold = p_gold * w_gold
-    e_gold = e_gold * w_gold
+    # d_gold = d_gold * w_gold
+    # p_gold = p_gold * w_gold
+    # e_gold = e_gold * w_gold
 
-    d_pred = d_pred * w_pred
-    p_pred = p_pred * w_pred
-    e_pred = e_pred * w_pred
+    # d_pred = d_pred * w_pred
+    # p_pred = p_pred * w_pred
+    # e_pred = e_pred * w_pred
     
-    d_out = torch.add(d_gold, d_pred).long()
-    p_out = torch.add(p_gold, p_pred)
-    e_out = torch.add(e_gold, e_pred)
+    # d_out = torch.add(d_gold, d_pred).long()
+    # p_out = torch.add(p_gold, p_pred)
+    # e_out = torch.add(e_gold, e_pred)
 
    
-    print('d_out type: ', type(d_out))
-    print(d_out)
-    # print(torch.equal(d_out, d_pred))
+    # print('d_out type: ', type(d_out))
+    # print(d_out)
+    # # print(torch.equal(d_out, d_pred))
+    # read_texts(model_id="fast_karlsson",
+    #            sentence=[text],
+    #            dur_list=[d_out],
+    #            pitch_list=[p_out],
+    #            energy_list=[e_out],
+    #            device='cpu',
+    #            filename=f"audios/Test/test_Sommer_Jambus.wav")
+
+    # sys.exit(0)
+    # text = "Einst stritten sich Nordwind und Sonne"
+    # tts = tts_dict["fast_karlsson"](device='cpu')
+    # phones, d_outs, p_outs, e_outs = tts.predict_prosody(text)
+    
+    # print()
+    # # d_outs = torch.add(d_outs, 2)
+    # # p_outs = torch.add(p_outs, 1)
+    # # e_outs = torch.add(e_outs, 1)
+    # print(phones, "\n", d_outs) #, "\n", p_outs, "\n", e_outs)
+    # print(type(d_outs))
+    # read_texts(model_id="fast_karlsson",
+    #            sentence=[text],
+    #            dur_list=[d_outs],
+    #            pitch_list=[p_outs],
+    #            energy_list=[e_outs],
+    #            device='cpu',
+    #            filename=f"audios/test.wav")
+    
+    # sys.exit(0)
+
+    poem_1 = "Zeitgeist-DLA"
+    text_list_1, dur_list_1, pitch_list_1, en_list_1 = extract_prosody_from_poem(poem_1)
+
+    poem_2 = "Zeitgeist-youtube1"
+    text_list_2, dur_list_2, pitch_list_2, en_list_2 = extract_prosody_from_poem(poem_2)
+    i = 0
+    if not os.path.isdir(f"audios/Zeitgeist"):
+        os.makedirs(f"audios/Zeitgeist")
+
+    text_list = text_list_1
+    dur_list = dur_list_1
+    pitch_list = pitch_list_2
+    en_list = en_list_2
+
     read_texts(model_id="fast_karlsson",
-               sentence=[text],
-               dur_list=[d_out],
-               pitch_list=[p_out],
-               energy_list=[e_out],
-               device='cpu',
-               filename=f"audios/Test/test_Sommer_Jambus.wav")
+               sentence=text_list,
+               dur_list=dur_list,
+               pitch_list=pitch_list,
+               energy_list=en_list,
+               device=exec_device,
+               filename=f"audios/Zeitgeist/Zetgeist_DLA.wav")    
+    
+    for text, dur, pitch, en in zip(text_list, dur_list, pitch_list, en_list):
+
+        read_texts(model_id="fast_karlsson",
+                    sentence=[text],
+                    dur_list=[dur],
+                    pitch_list=[pitch],
+                    energy_list=[en],
+                    device=exec_device,
+                    filename=f"audios/Zeitgeist/Zeitgeist_mixed/segment_{i}.wav")
+        i += 1
 
     sys.exit(0)
-    text = "Einst stritten sich Nordwind und Sonne"
-    tts = tts_dict["fast_karlsson"](device='cpu')
-    phones, d_outs, p_outs, e_outs = tts.predict_prosody(text)
-    
-    print()
-    # d_outs = torch.add(d_outs, 2)
-    # p_outs = torch.add(p_outs, 1)
-    # e_outs = torch.add(e_outs, 1)
-    print(phones, "\n", d_outs) #, "\n", p_outs, "\n", e_outs)
-    print(type(d_outs))
-    read_texts(model_id="fast_karlsson",
-               sentence=[text],
-               dur_list=[d_outs],
-               pitch_list=[p_outs],
-               energy_list=[e_outs],
-               device='cpu',
-               filename=f"audios/test.wav")
-    
-    sys.exit(0)
+
     poem = "Nachtgesaenge_09_Der_Winkel_von_Hardt"
     text_list, dur_list, pitch_list, en_list = extract_prosody_from_poem(poem)
     i = 0
