@@ -154,7 +154,7 @@ class FastSpeechDataset(Dataset):
                self.datapoints[index][4], \
                self.datapoints[index][5], \
                self.datapoints[index][6], \
-               self.datapoints[index][7]
+               self.datapoints[index][7][8:520]
 
     def __len__(self):
         return len(self.datapoints)

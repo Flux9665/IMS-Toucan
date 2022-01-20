@@ -97,7 +97,7 @@ class FastSpeech2(torch.nn.Module, ABC):
                  use_weighted_masking=True,
                  # additional features
                  use_dtw_loss=False,
-                 utt_embed_dim=776):
+                 utt_embed_dim=512):
         super().__init__()
 
         # store hyperparameters
