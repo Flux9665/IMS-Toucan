@@ -124,9 +124,9 @@ def train_loop(net,
     default_embedding = None
     for datapoint in train_dataset:
         if default_embedding is None:
-            default_embedding = datapoint[7].squeeze()[8:200]
+            default_embedding = datapoint[7].squeeze()
         else:
-            default_embedding = default_embedding + datapoint[7].squeeze()[8:200]
+            default_embedding = default_embedding + datapoint[7].squeeze()
     default_embedding = (default_embedding / len(train_dataset)).to(device)
     step_counter = 0
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
