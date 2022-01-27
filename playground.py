@@ -11,11 +11,17 @@ from Preprocessing.AudioPreprocessor import AudioPreprocessor
 from TrainingInterfaces.Text_to_Spectrogram.AutoAligner.Aligner import Aligner
 from TrainingInterfaces.Text_to_Spectrogram.FastSpeech2.DurationCalculator import DurationCalculator
 
-parser = ArgumentParser()
-parser.add_argument('--poem',
-                    type=str,
-                    help="Name of the poem to split")
-args = parser.parse_args()
+# parser = ArgumentParser()
+# parser.add_argument('--poem',
+#                     type=str,
+#                     help="Name of the poem to split")
+# args = parser.parse_args()
+
+poem_name = "W3_K_030_Das_buckliche_Männlein"
+
+audio_dir = "/mount/arbeitsdaten/textklang/synthesis/Maerchen/wavs"
+transcript_dir = "/mount/arbeitsdaten/textklang/synthesis/Maerchen/Wunderhorn-Texte"
+out_dir = "/mount/arbeitsdaten/textklang/synthesis/Maerchen/Synthesis_Data"
 
 # loading modules
 acoustic_model = Aligner()
@@ -24,16 +30,16 @@ dc = DurationCalculator(reduction_factor=1)
 tf = ArticulatoryCombinedTextFrontend(language="de")
 vad = VoiceActivityDetection(sample_rate=16000, trigger_time=0.0001, trigger_level=3.0, pre_trigger_time=0.2)
 
-#root = "/projekte/textklang/Primary-Data/Hoelderlin/txt-und-wavs/Zischler"
-root = "/mount/arbeitsdaten/textklang/synthesis/Zischler"
-root = "/mount/arbeitsdaten/textklang/synthesis"
-poem_name = args.poem
+# root = "/projekte/textklang/Primary-Data/Hoelderlin/txt-und-wavs/Zischler"
+# root = "/mount/arbeitsdaten/textklang/synthesis/Zischler"
+# root = "/mount/arbeitsdaten/textklang/synthesis"
+# poem_name = args.poem
 
 # audio_path = os.path.join(root, 'Primary_Data', 'Zischler_' + poem_name + '.wav')
 # transcript_path = os.path.join(root, 'Primary_Data' ,'Zischler_' + poem_name + '-text.txt')
-audio_path = os.path.join(root, poem_name + '.wav')
-transcript_path = os.path.join(root, poem_name + '-text.txt')
-out_dir = os.path.join(root, 'Synthesis_Data', poem_name)
+audio_path = os.path.join(audio_dir, poem_name + '.wav')
+transcript_path = os.path.join(transcript_dir, poem_name + '.txt')
+out_dir = os.path.join(out_dir, poem_name)
 os.makedirs(out_dir, exist_ok=True)
 
 
