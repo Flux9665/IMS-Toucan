@@ -61,16 +61,16 @@ def extract_prosody(transcript, ref_audio_path, lang="de"):
 
 def clone_utterance(path_to_reference_audio, reference_transcription, filename_of_result, model_id="fast_karlsson", device="cpu", lang="de"):
     tts = tts_dict[model_id](device=device)
-    tts.set_utterance_embedding(path_to_reference_audio=path_to_reference_audio)
+    # tts.set_utterance_embedding(path_to_reference_audio=path_to_reference_audio)
     transcript, duration, pitch, energy = extract_prosody(reference_transcription, path_to_reference_audio, lang=lang)
     tts.read_to_file(text_list=[reference_transcription], file_location=filename_of_result, dur_list=[duration], pitch_list=[pitch], energy_list=[energy])
 
 
 if __name__ == '__main__':
 
-    clone_utterance(path_to_reference_audio="/mount/arbeitsdaten/textklang/synthesis/Zischler/Synthesis_Data/Der_Neckar/segment_6.wav",
-                    reference_transcription="Mir oft der Knechtschaft Schmerzen; und aus dem Tal,",
-                    filename_of_result="audios/test_cloned_cond_Neckar6.wav",
+    clone_utterance(path_to_reference_audio="/mount/arbeitsdaten/textklang/synthesis/Zischler/Synthesis_Data/Strophen/Zischler_Hoelderlin_Heidelberg/segment_6.wav",
+                    reference_transcription="Quellen hattest du ihm, hattest dem Flüchtigen~Kühle Schatten geschenkt, und die Gestade sahn~All ihm nach, und es bebte~Aus den Wellen ihr lieblich Bild.",
+                    filename_of_result="audios/Strophen/Heidelberg/segment6.wav",
                     model_id="fast_karlsson",
                     lang="de",
                     device="cpu")

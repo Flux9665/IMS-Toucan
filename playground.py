@@ -17,11 +17,11 @@ from TrainingInterfaces.Text_to_Spectrogram.FastSpeech2.DurationCalculator impor
 #                     help="Name of the poem to split")
 # args = parser.parse_args()
 
-poem_name = "W3_K_030_Das_buckliche_Männlein"
+poem_name = "Zischler_Hoelderlin_Heidelberg"
 
-audio_dir = "/mount/arbeitsdaten/textklang/synthesis/Maerchen/wavs"
-transcript_dir = "/mount/arbeitsdaten/textklang/synthesis/Maerchen/Wunderhorn-Texte"
-out_dir = "/mount/arbeitsdaten/textklang/synthesis/Maerchen/Synthesis_Data"
+audio_dir = "/mount/arbeitsdaten/textklang/synthesis/Zischler/Primary_Data"
+transcript_dir = "/mount/arbeitsdaten/textklang/synthesis/Zischler/Primary_Data"
+out_dir = "/mount/arbeitsdaten/textklang/synthesis/Zischler/Synthesis_Data/Strophen"
 
 # loading modules
 acoustic_model = Aligner()
@@ -38,7 +38,7 @@ vad = VoiceActivityDetection(sample_rate=16000, trigger_time=0.0001, trigger_lev
 # audio_path = os.path.join(root, 'Primary_Data', 'Zischler_' + poem_name + '.wav')
 # transcript_path = os.path.join(root, 'Primary_Data' ,'Zischler_' + poem_name + '-text.txt')
 audio_path = os.path.join(audio_dir, poem_name + '.wav')
-transcript_path = os.path.join(transcript_dir, poem_name + '.txt')
+transcript_path = os.path.join(transcript_dir, poem_name + '-text.txt')
 out_dir = os.path.join(out_dir, poem_name)
 os.makedirs(out_dir, exist_ok=True)
 
@@ -53,8 +53,11 @@ melspec = ap.audio_to_mel_spec_tensor(audio=norm_wave, normalize=False, explicit
 # extract phonemes
 lines = list()
 with open(transcript_path, "r", encoding="utf8") as transcript:
-    lines_list = [line for line in transcript.read().split("\n") if line.lstrip()]
+#     lines_list = [line for line in transcript.read().split("\n") if line.lstrip()]
+    lines_list = [line for line in transcript.read().split("\n\n") if line.lstrip()]
     for line in lines_list:
+        line = line.replace('\n', '~')
+        print(line)
         lines.append(tf.string_to_tensor(line, handle_missing=False).squeeze())
 # postprocess phonemes: [~ sentence ~ #] --> [sentence ~] except for the first one, which is [~ sentence ~]
 processed_lines = list()
