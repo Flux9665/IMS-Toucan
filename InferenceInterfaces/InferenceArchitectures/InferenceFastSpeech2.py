@@ -2,13 +2,13 @@ from abc import ABC
 
 import torch
 
-from Layers.Conformer import Conformer
-from Layers.DurationPredictor import DurationPredictor
-from Layers.LengthRegulator import LengthRegulator
-from Layers.PostNet import PostNet
-from Layers.VariancePredictor import VariancePredictor
-from Utility.utils import make_non_pad_mask
-from Utility.utils import make_pad_mask
+from ...Layers.Conformer import Conformer
+from ...Layers.DurationPredictor import DurationPredictor
+from ...Layers.LengthRegulator import LengthRegulator
+from ...Layers.PostNet import PostNet
+from ...Layers.VariancePredictor import VariancePredictor
+from ...Utility.utils import make_non_pad_mask
+from ...Utility.utils import make_pad_mask
 
 
 class FastSpeech2(torch.nn.Module, ABC):

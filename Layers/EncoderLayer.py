@@ -7,7 +7,7 @@
 import torch
 from torch import nn
 
-from Layers.LayerNorm import LayerNorm
+from .LayerNorm import LayerNorm
 
 
 class EncoderLayer(nn.Module):
