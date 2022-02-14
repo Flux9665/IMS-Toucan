@@ -5,7 +5,7 @@
 
 import torch
 
-from .LayerNorm import LayerNorm
+from Layers.LayerNorm import LayerNorm
 
 
 class DurationPredictor(torch.nn.Module):
