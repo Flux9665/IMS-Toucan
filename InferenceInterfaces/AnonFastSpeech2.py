@@ -24,7 +24,7 @@ class AnonFastSpeech2(torch.nn.Module):
         self.device = device
         self.text2phone = ArticulatoryCombinedTextFrontend(language=language, add_silence_to_end=True)
         checkpoint = torch.load(path_to_fastspeech_model, map_location='cpu')
-        self.phone2mel = FastSpeech2(weights=checkpoint["model"]).to(torch.device(device))
+        self.phone2mel = FastSpeech2(weights=checkpoint["model"], lang_embs=None).to(torch.device(device))
         self.mel2wav = HiFiGANGenerator(path_to_weights=path_to_hifigan_model).to(torch.device(device))
         self.default_utterance_embedding = checkpoint["default_emb"].to(self.device)
         self.phone2mel.eval()
