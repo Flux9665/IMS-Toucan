@@ -1,6 +1,6 @@
 import torch
 
-from ...Layers.ResidualBlock import HiFiGANResidualBlock as ResidualBlock
+from Layers.ResidualBlock import HiFiGANResidualBlock as ResidualBlock
 
 
 class HiFiGANGenerator(torch.nn.Module):

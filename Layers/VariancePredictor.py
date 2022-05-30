@@ -6,7 +6,7 @@ from abc import ABC
 
 import torch
 
-from .LayerNorm import LayerNorm
+from Layers.LayerNorm import LayerNorm
 
 
 class VariancePredictor(torch.nn.Module, ABC):

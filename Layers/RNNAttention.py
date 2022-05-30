@@ -4,8 +4,8 @@
 import torch
 import torch.nn.functional as F
 
-from ..Utility.utils import make_pad_mask
-from ..Utility.utils import to_device
+from Utility.utils import make_pad_mask
+from Utility.utils import to_device
 
 
 def _apply_attention_constraint(e, last_attended_idx, backward_window=1, forward_window=3):

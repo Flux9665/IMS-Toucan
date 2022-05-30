@@ -5,14 +5,14 @@ Taken from ESPNet
 import torch
 import torch.nn.functional as F
 
-from .Attention import RelPositionMultiHeadedAttention
-from .Convolution import ConvolutionModule
-from .EncoderLayer import EncoderLayer
-from .LayerNorm import LayerNorm
-from .MultiLayeredConv1d import MultiLayeredConv1d
-from .MultiSequential import repeat
-from .PositionalEncoding import RelPositionalEncoding
-from .Swish import Swish
+from Layers.Attention import RelPositionMultiHeadedAttention
+from Layers.Convolution import ConvolutionModule
+from Layers.EncoderLayer import EncoderLayer
+from Layers.LayerNorm import LayerNorm
+from Layers.MultiLayeredConv1d import MultiLayeredConv1d
+from Layers.MultiSequential import repeat
+from Layers.PositionalEncoding import RelPositionalEncoding
+from Layers.Swish import Swish
 
 
 class Conformer(torch.nn.Module):
@@ -98,17 +98,14 @@ class Conformer(torch.nn.Module):
     def forward(self, xs, masks, utterance_embedding=None, lang_ids=None):
         """
         Encode input sequence.
-
         Args:
             utterance_embedding: embedding containing lots of conditioning signals
             step: indicator for when to start updating the embedding function
             xs (torch.Tensor): Input tensor (#batch, time, idim).
             masks (torch.Tensor): Mask tensor (#batch, time).
-
         Returns:
             torch.Tensor: Output tensor (#batch, time, attention_dim).
             torch.Tensor: Mask tensor (#batch, time).
-
         """
 
         if self.embed is not None:

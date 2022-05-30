@@ -5,7 +5,7 @@ import panphon
 import phonemizer
 import torch
 
-from .papercup_features import generate_feature_table
+from Preprocessing.papercup_features import generate_feature_table
 
 
 class ArticulatoryCombinedTextFrontend:
@@ -288,9 +288,7 @@ def english_text_expansion(text):
 
 
 def get_language_id(language):
-    if language == "en":
-        return torch.LongTensor([0])
-    elif language == "de":
+    if language == "de":
         return torch.LongTensor([1])
     elif language == "el":
         return torch.LongTensor([2])
@@ -312,12 +310,14 @@ def get_language_id(language):
         return torch.LongTensor([10])
     elif language == "it":
         return torch.LongTensor([11])
+    elif language == "en":
+        return torch.LongTensor([12])
 
 
 if __name__ == '__main__':
     # test an English utterance
-    tfr_en = ArticulatoryCombinedTextFrontend(language="en")
-    print(tfr_en.string_to_tensor("This is a complex sentence, it even has a pause! But can it do this? Nice.", view=True))
+    tf = ArticulatoryCombinedTextFrontend(language="en")
+    print(tf.string_to_tensor("This is a complex sentence, it even has a pause! But can it do this? Nice.", view=True))
 
-    tfr_en = ArticulatoryCombinedTextFrontend(language="de")
-    print(tfr_en.string_to_tensor("Alles klar, jetzt testen wir einen deutschen Satz. Ich hoffe es gibt nicht mehr viele unspezifizierte Phoneme.", view=True))
+    tf = ArticulatoryCombinedTextFrontend(language="de")
+    print(tf.string_to_tensor("Alles klar, jetzt testen wir einen deutschen Satz. Ich hoffe es gibt nicht mehr viele unspezifizierte Phoneme.", view=True))

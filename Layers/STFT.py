@@ -6,12 +6,17 @@ import torch
 from torch.functional import stft as torch_stft
 from torch_complex.tensor import ComplexTensor
 
-from ..Utility.utils import make_pad_mask
+from Utility.utils import make_pad_mask
 
 
 class STFT(torch.nn.Module):
 
-    def __init__(self, n_fft=512, win_length=None, hop_length=128, window="hann", center=True, normalized=False,
+    def __init__(self, n_fft=512,
+                 win_length=None,
+                 hop_length=128,
+                 window="hann",
+                 center=True,
+                 normalized=False,
                  onesided=True):
         super().__init__()
         self.n_fft = n_fft
@@ -82,7 +87,7 @@ class STFT(torch.nn.Module):
                 pad = self.win_length // 2
                 ilens = ilens + 2 * pad
 
-            olens = (ilens - self.win_length) // self.hop_length + 1
+            olens = torch.div((ilens - self.win_length), self.hop_length, rounding_mode='trunc') + 1
             output.masked_fill_(make_pad_mask(olens, output, 1), 0.0)
         else:
             olens = None
