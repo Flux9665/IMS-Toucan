@@ -15,7 +15,7 @@ class FastSpeech2(torch.nn.Module, ABC):
 
     def __init__(self,  # network structure related
                  weights,
-                 idim=66,
+                 idim=60,
                  odim=80,
                  adim=384,
                  aheads=4,
@@ -71,7 +71,7 @@ class FastSpeech2(torch.nn.Module, ABC):
                  # additional features
                  utt_embed_dim=704,
                  connect_utt_emb_at_encoder_out=True,
-                 lang_embs=100):
+                 lang_embs=None):
         super().__init__()
         self.idim = idim
         self.odim = odim
