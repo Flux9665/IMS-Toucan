@@ -5,7 +5,7 @@ import torch.multiprocessing
 from numpy import trim_zeros
 from speechbrain.pretrained import EncoderClassifier
 
-from Preprocessing.AudioPreprocessor import AudioPreprocessor
+from IMSToucan.Preprocessing.AudioPreprocessor import AudioPreprocessor
 
 
 class ProsodicConditionExtractor:

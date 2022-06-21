@@ -6,7 +6,7 @@ from abc import ABC
 
 import torch
 
-from Utility.utils import pad_list
+from IMSToucan.Utility.utils import pad_list
 
 
 class LengthRegulator(torch.nn.Module, ABC):

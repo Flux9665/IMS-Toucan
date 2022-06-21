@@ -6,7 +6,7 @@ import torch
 from torch.functional import stft as torch_stft
 from torch_complex.tensor import ComplexTensor
 
-from Utility.utils import make_pad_mask
+from IMSToucan.Utility.utils import make_pad_mask
 
 
 class STFT(torch.nn.Module):

@@ -8,11 +8,11 @@ import sounddevice
 import soundfile
 import torch
 
-from InferenceInterfaces.InferenceArchitectures.InferenceFastSpeech2 import FastSpeech2
-from InferenceInterfaces.InferenceArchitectures.InferenceHiFiGAN import HiFiGANGenerator
-from Preprocessing.ProsodicConditionExtractor import ProsodicConditionExtractor
-from Preprocessing.TextFrontend import ArticulatoryCombinedTextFrontend
-from Preprocessing.TextFrontend import get_language_id
+from IMSToucan.InferenceInterfaces.InferenceArchitectures.InferenceFastSpeech2 import FastSpeech2
+from IMSToucan.InferenceInterfaces.InferenceArchitectures.InferenceHiFiGAN import HiFiGANGenerator
+from IMSToucan.Preprocessing.ProsodicConditionExtractor import ProsodicConditionExtractor
+from IMSToucan.Preprocessing.TextFrontend import ArticulatoryCombinedTextFrontend
+from IMSToucan.Preprocessing.TextFrontend import get_language_id
 
 
 class InferenceFastSpeech2(torch.nn.Module):

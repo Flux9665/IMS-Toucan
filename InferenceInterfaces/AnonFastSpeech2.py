@@ -5,8 +5,8 @@ import torch
 
 from .InferenceArchitectures.InferenceFastSpeech2 import FastSpeech2
 from .InferenceArchitectures.InferenceHiFiGAN import HiFiGANGenerator
-from ..Preprocessing.ArticulatoryCombinedTextFrontend import ArticulatoryCombinedTextFrontend
-from ..Preprocessing.ArticulatoryCombinedTextFrontend import get_language_id
+from ..Preprocessing.TextFrontend import ArticulatoryCombinedTextFrontend
+from ..Preprocessing.TextFrontend import get_language_id
 
 
 class AnonFastSpeech2(torch.nn.Module):
@@ -51,7 +51,7 @@ class AnonFastSpeech2(torch.nn.Module):
             mel = mel.transpose(0, 1)
             wave = self.mel2wav(mel)
         if view:
-            from Utility.utils import cumsum_durations
+            from IMSToucan.Utility.utils import cumsum_durations
             fig, ax = plt.subplots(nrows=2, ncols=1)
             ax[0].plot(wave.cpu().numpy())
             lbd.specshow(mel.cpu().numpy(),

@@ -5,7 +5,7 @@ import panphon
 import phonemizer
 import torch
 
-from Preprocessing.papercup_features import generate_feature_table
+from IMSToucan.Preprocessing.papercup_features import generate_feature_table
 
 
 class ArticulatoryCombinedTextFrontend:

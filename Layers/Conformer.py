@@ -5,14 +5,14 @@ Taken from ESPNet
 import torch
 import torch.nn.functional as F
 
-from Layers.Attention import RelPositionMultiHeadedAttention
-from Layers.Convolution import ConvolutionModule
-from Layers.EncoderLayer import EncoderLayer
-from Layers.LayerNorm import LayerNorm
-from Layers.MultiLayeredConv1d import MultiLayeredConv1d
-from Layers.MultiSequential import repeat
-from Layers.PositionalEncoding import RelPositionalEncoding
-from Layers.Swish import Swish
+from IMSToucan.Layers.Attention import RelPositionMultiHeadedAttention
+from IMSToucan.Layers.Convolution import ConvolutionModule
+from IMSToucan.Layers.EncoderLayer import EncoderLayer
+from IMSToucan.Layers.LayerNorm import LayerNorm
+from IMSToucan.Layers.MultiLayeredConv1d import MultiLayeredConv1d
+from IMSToucan.Layers.MultiSequential import repeat
+from IMSToucan.Layers.PositionalEncoding import RelPositionalEncoding
+from IMSToucan.Layers.Swish import Swish
 
 
 class Conformer(torch.nn.Module):

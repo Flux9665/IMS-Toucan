@@ -8,8 +8,8 @@ import torch
 from phonemizer.backend import EspeakBackend
 from pypinyin import pinyin
 
-from Preprocessing.articulatory_features import generate_feature_table
-from Preprocessing.articulatory_features import get_phone_to_id
+from IMSToucan.Preprocessing.articulatory_features import generate_feature_table
+from IMSToucan.Preprocessing.articulatory_features import get_phone_to_id
 
 
 class ArticulatoryCombinedTextFrontend:
