@@ -16,11 +16,10 @@ from .TrainingInterfaces.Text_to_Spectrogram.FastSpeech2.PitchCalculator import 
 
 class UtteranceCloner:
 
-    def __init__(self, path_to_tts, path_to_vocoder, device):
-        self.tts = AnonFastSpeech2(device=device, path_to_tts =path_to_tts , path_to_vocoder=path_to_vocoder)
+    def __init__(self, path_to_fastspeech_model, path_to_hifigan_model, path_to_aligner_model, device):
+        self.tts = AnonFastSpeech2(device=device, path_to_fastspeech_model =path_to_fastspeech_model, path_to_hifigan_model=path_to_hifigan_model)
         self.device = device
-        acoustic_checkpoint_path = os.path.join("Models", "Aligner", "aligner.pt")
-        self.aligner_weights = torch.load(acoustic_checkpoint_path, map_location='cpu')["asr_model"]
+        self.aligner_weights = torch.load(path_to_aligner_model, map_location='cpu')["asr_model"]
         torch.hub._validate_not_a_forked_repo = lambda a, b, c: True  # torch 1.9 has a bug in the hub loading, this is a workaround
         # careful: assumes 16kHz or 8kHz audio
         self.silero_model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad',
@@ -142,9 +141,9 @@ class UtteranceCloner:
     def clone_utterance(self,
                         path_to_reference_audio,
                         reference_transcription,
-                        filename_of_result,
                         clone_speaker_identity=True,
-                        lang="de"):
+                        lang="de",
+                        input_is_phones=False):
         if clone_speaker_identity:
             prev_speaker_embedding = self.tts.default_utterance_embedding.clone().detach()
             self.tts.set_utterance_embedding(path_to_reference_audio=path_to_reference_audio)
@@ -154,18 +153,18 @@ class UtteranceCloner:
         self.tts.set_language(lang)
         start_sil = torch.zeros([silence_frames_start * 3]).to(self.device)  # timestamps are from 16kHz, but now we're using 48kHz, so upsampling required
         end_sil = torch.zeros([silence_frames_end * 3]).to(self.device)  # timestamps are from 16kHz, but now we're using 48kHz, so upsampling required
-        cloned_speech = self.tts(reference_transcription, view=False, durations=duration, pitch=pitch, energy=energy)
+        cloned_speech = self.tts(reference_transcription, view=False, durations=duration, pitch=pitch, energy=energy,
+                                 input_is_phones=input_is_phones)
         cloned_utt = torch.cat((start_sil, cloned_speech, end_sil), dim=0)
-        sf.write(file=filename_of_result, data=cloned_utt.cpu().numpy(), samplerate=48000)
         if clone_speaker_identity:
             self.tts.default_utterance_embedding = prev_speaker_embedding.to(self.device)  # return to normal
+        return cloned_utt
 
 
 if __name__ == '__main__':
-    uc = UtteranceCloner(path_to_tts="fill me with path", path_to_vocoder="fill me with path", device="cuda" if torch.cuda.is_available() else "cpu")
+    uc = UtteranceCloner(path_to_fastspeech_model="fill me with path", path_to_hifigan_model="fill me with path", path_to_aligner_model="fill me with path", device="cuda" if torch.cuda.is_available() else "cpu")
 
-    uc.clone_utterance(path_to_reference_audio="audios/test.wav",
-                       reference_transcription="Hello world, this is a test.",
-                       filename_of_result="audios/test_cloned.wav",
-                       clone_speaker_identity=False,
-                       lang="en")
+    wav = uc.clone_utterance(path_to_reference_audio="audios/test.wav",
+                             reference_transcription="Hello world, this is a test.",
+                             clone_speaker_identity=False,
+                             lang="en")

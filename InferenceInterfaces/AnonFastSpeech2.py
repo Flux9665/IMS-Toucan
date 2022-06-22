@@ -8,23 +8,23 @@ import sounddevice
 import soundfile
 import torch
 
-from InferenceInterfaces.InferenceArchitectures.InferenceFastSpeech2 import FastSpeech2
-from InferenceInterfaces.InferenceArchitectures.InferenceHiFiGAN import HiFiGANGenerator
-from Preprocessing.ProsodicConditionExtractor import ProsodicConditionExtractor
-from Preprocessing.TextFrontend import ArticulatoryCombinedTextFrontend
-from Preprocessing.TextFrontend import get_language_id
+from ..InferenceInterfaces.InferenceArchitectures.InferenceFastSpeech2 import FastSpeech2
+from ..InferenceInterfaces.InferenceArchitectures.InferenceHiFiGAN import HiFiGANGenerator
+from ..Preprocessing.ProsodicConditionExtractor import ProsodicConditionExtractor
+from ..Preprocessing.TextFrontend import ArticulatoryCombinedTextFrontend
+from ..Preprocessing.TextFrontend import get_language_id
 
 
 class AnonFastSpeech2(torch.nn.Module):
 
-    def __init__(self, path_to_tts, path_to_vocoder, device="cpu", language="en", noise_reduce=False):
+    def __init__(self, path_to_hifigan_model, path_to_fastspeech_model, device="cpu", language="en", noise_reduce=False):
         super().__init__()
         self.device = device
         self.text2phone = ArticulatoryCombinedTextFrontend(language=language, add_silence_to_end=True)
-        checkpoint = torch.load(path_to_tts, map_location='cpu')
+        checkpoint = torch.load(path_to_fastspeech_model, map_location='cpu')
         self.use_lang_id = False
         self.phone2mel = FastSpeech2(weights=checkpoint["model"]).to(torch.device(device))
-        self.mel2wav = HiFiGANGenerator(path_to_weights=path_to_vocoder).to(torch.device(device))
+        self.mel2wav = HiFiGANGenerator(path_to_weights=path_to_hifigan_model).to(torch.device(device))
         self.default_utterance_embedding = checkpoint["default_emb"].to(self.device)
         self.phone2mel.eval()
         self.mel2wav.eval()
@@ -74,7 +74,7 @@ class AnonFastSpeech2(torch.nn.Module):
                 durations=None,
                 pitch=None,
                 energy=None,
-                input_is_phones=False):
+                text_is_phonemes=False):
         """
         duration_scaling_factor: reasonable values are 0.5 < scale < 1.5.
                                      1.0 means no scaling happens, higher values increase durations for the whole
@@ -87,17 +87,14 @@ class AnonFastSpeech2(torch.nn.Module):
                                    lower values decrease variance of the energy curve.
         """
         with torch.inference_mode():
-            phones = self.text2phone.string_to_tensor(text, input_phonemes=input_is_phones).to(torch.device(self.device))
+            phones = self.text2phone.string_to_tensor(text, input_phonemes=text_is_phonemes).to(torch.device(self.device))
             mel, durations, pitch, energy = self.phone2mel(phones,
                                                            return_duration_pitch_energy=True,
                                                            utterance_embedding=self.default_utterance_embedding,
                                                            durations=durations,
                                                            pitch=pitch,
                                                            energy=energy,
-                                                           lang_id=self.lang_id,
-                                                           duration_scaling_factor=duration_scaling_factor,
-                                                           pitch_variance_scale=pitch_variance_scale,
-                                                           energy_variance_scale=energy_variance_scale)
+                                                           lang_id=self.lang_id)
             mel = mel.transpose(0, 1)
             wave = self.mel2wav(mel)
         if view:
