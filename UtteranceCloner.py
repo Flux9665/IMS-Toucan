@@ -54,7 +54,7 @@ class UtteranceCloner:
         norm_wave = norm_wave[speech_timestamps[0]['start']:speech_timestamps[-1]['end']]
 
         norm_wave_length = torch.LongTensor([len(norm_wave)])
-        text = tf.string_to_tensor(transcript, handle_missing=False).squeeze(0)
+        text = tf.string_to_tensor(transcript, handle_missing=False, input_phonemes=True).squeeze(0)
         melspec = ap.audio_to_mel_spec_tensor(audio=norm_wave, normalize=False, explicit_sampling_rate=16000).transpose(0, 1)
         melspec_length = torch.LongTensor([len(melspec)]).numpy()
 
