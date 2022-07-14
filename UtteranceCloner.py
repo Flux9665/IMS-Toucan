@@ -17,7 +17,7 @@ from .TrainingInterfaces.Text_to_Spectrogram.FastSpeech2.PitchCalculator import 
 class UtteranceCloner:
 
     def __init__(self, path_to_fastspeech_model, path_to_hifigan_model, path_to_aligner_model, device):
-        self.tts = AnonFastSpeech2(device=device, path_to_fastspeech_model =path_to_fastspeech_model, path_to_hifigan_model=path_to_hifigan_model)
+        self.tts = AnonFastSpeech2(device=device, path_to_fastspeech_model=path_to_fastspeech_model, path_to_hifigan_model=path_to_hifigan_model)
         self.device = device
         self.aligner_weights = torch.load(path_to_aligner_model, map_location='cpu')["asr_model"]
         torch.hub._validate_not_a_forked_repo = lambda a, b, c: True  # torch 1.9 has a bug in the hub loading, this is a workaround
@@ -31,7 +31,7 @@ class UtteranceCloner:
         torch.set_grad_enabled(True)  # finding this issue was very infuriating: silero sets
         # this to false globally during model loading rather than using inference mode or no_grad
 
-    def extract_prosody(self, transcript, ref_audio_path, lang="de", on_line_fine_tune=True):
+    def extract_prosody(self, transcript, ref_audio_path, lang="de", on_line_fine_tune=True, input_is_phones=False):
         acoustic_model = Aligner()
         acoustic_model.load_state_dict(self.aligner_weights)
         acoustic_model = acoustic_model.to(self.device)
@@ -54,7 +54,7 @@ class UtteranceCloner:
         norm_wave = norm_wave[speech_timestamps[0]['start']:speech_timestamps[-1]['end']]
 
         norm_wave_length = torch.LongTensor([len(norm_wave)])
-        text = tf.string_to_tensor(transcript, handle_missing=False, input_phonemes=True).squeeze(0)
+        text = tf.string_to_tensor(transcript, handle_missing=True, input_phonemes=input_is_phones).squeeze(0)
         melspec = ap.audio_to_mel_spec_tensor(audio=norm_wave, normalize=False, explicit_sampling_rate=16000).transpose(0, 1)
         melspec_length = torch.LongTensor([len(melspec)]).numpy()
 
@@ -78,7 +78,7 @@ class UtteranceCloner:
             # actual fine-tuning starts here
             optim_asr = SGD(acoustic_model.parameters(), lr=0.1)
             acoustic_model.train()
-            for _ in tqdm(list(range(steps))):
+            for _ in list(range(steps)):
                 pred = acoustic_model(mel)
                 loss = acoustic_model.ctc_loss(pred.transpose(0, 1).log_softmax(2), tokens, mel_len, tokens_len)
                 optim_asr.zero_grad()
@@ -149,12 +149,13 @@ class UtteranceCloner:
             self.tts.set_utterance_embedding(path_to_reference_audio=path_to_reference_audio)
         duration, pitch, energy, silence_frames_start, silence_frames_end = self.extract_prosody(reference_transcription,
                                                                                                  path_to_reference_audio,
-                                                                                                 lang=lang)
+                                                                                                 lang=lang,
+                                                                                                 input_is_phones=input_is_phones)
         self.tts.set_language(lang)
         start_sil = torch.zeros([silence_frames_start * 3]).to(self.device)  # timestamps are from 16kHz, but now we're using 48kHz, so upsampling required
         end_sil = torch.zeros([silence_frames_end * 3]).to(self.device)  # timestamps are from 16kHz, but now we're using 48kHz, so upsampling required
         cloned_speech = self.tts(reference_transcription, view=False, durations=duration, pitch=pitch, energy=energy,
-                                 input_is_phones=input_is_phones)
+                                 text_is_phonemes=input_is_phones)
         cloned_utt = torch.cat((start_sil, cloned_speech, end_sil), dim=0)
         if clone_speaker_identity:
             self.tts.default_utterance_embedding = prev_speaker_embedding.to(self.device)  # return to normal
