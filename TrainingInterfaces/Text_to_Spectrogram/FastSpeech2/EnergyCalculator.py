@@ -5,8 +5,8 @@
 import torch
 import torch.nn.functional as F
 
-from IMSToucan.Layers.STFT import STFT
-from IMSToucan.Utility.utils import pad_list
+from ....Layers.STFT import STFT
+from ....Utility.utils import pad_list
 
 
 class EnergyCalculator(torch.nn.Module):

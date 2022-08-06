@@ -1,9 +1,6 @@
-import os
-
 import soundfile as sf
 import torch
 from torch.optim import SGD
-from tqdm import tqdm
 
 from .InferenceInterfaces.AnonFastSpeech2 import AnonFastSpeech2
 from .Preprocessing.AudioPreprocessor import AudioPreprocessor
@@ -16,8 +13,9 @@ from .TrainingInterfaces.Text_to_Spectrogram.FastSpeech2.PitchCalculator import 
 
 class UtteranceCloner:
 
-    def __init__(self, path_to_fastspeech_model, path_to_hifigan_model, path_to_aligner_model, device):
-        self.tts = AnonFastSpeech2(device=device, path_to_fastspeech_model=path_to_fastspeech_model, path_to_hifigan_model=path_to_hifigan_model)
+    def __init__(self, path_to_fastspeech_model, path_to_hifigan_model, path_to_aligner_model, path_to_embed_model, device):
+        self.tts = AnonFastSpeech2(device=device, path_to_fastspeech_model=path_to_fastspeech_model, path_to_hifigan_model=path_to_hifigan_model,
+                                   path_to_embed_model=path_to_embed_model)
         self.device = device
         self.aligner_weights = torch.load(path_to_aligner_model, map_location='cpu')["asr_model"]
         torch.hub._validate_not_a_forked_repo = lambda a, b, c: True  # torch 1.9 has a bug in the hub loading, this is a workaround
@@ -31,7 +29,14 @@ class UtteranceCloner:
         torch.set_grad_enabled(True)  # finding this issue was very infuriating: silero sets
         # this to false globally during model loading rather than using inference mode or no_grad
 
-    def extract_prosody(self, transcript, ref_audio_path, lang="de", on_line_fine_tune=True, input_is_phones=False):
+    def extract_prosody(self,
+                        transcript,
+                        ref_audio_path,
+                        lang="de",
+                        on_line_fine_tune=True,
+                        input_is_phones=False,
+                        random_offset_lower=0,
+                        random_offset_higher=5):
         acoustic_model = Aligner()
         acoustic_model.load_state_dict(self.aligner_weights)
         acoustic_model = acoustic_model.to(self.device)
@@ -142,11 +147,19 @@ class UtteranceCloner:
                         path_to_reference_audio,
                         reference_transcription,
                         clone_speaker_identity=True,
+                        speaker_embedding=None,
                         lang="de",
                         input_is_phones=False):
-        if clone_speaker_identity:
+        # speaker_embedding can be either a path to a reference audio or a pre-extracted embedding
+        if clone_speaker_identity or speaker_embedding is not None:
             prev_speaker_embedding = self.tts.default_utterance_embedding.clone().detach()
-            self.tts.set_utterance_embedding(path_to_reference_audio=path_to_reference_audio)
+            if clone_speaker_identity:
+                self.tts.set_utterance_embedding(path_to_reference_audio=path_to_reference_audio)
+            elif type(speaker_embedding) == str:
+                self.tts.set_utterance_embedding(path_to_reference_audio=path_to_reference_audio)
+            else:
+                self.tts.set_utterance_embedding(embedding=speaker_embedding)
+
         duration, pitch, energy, silence_frames_start, silence_frames_end = self.extract_prosody(reference_transcription,
                                                                                                  path_to_reference_audio,
                                                                                                  lang=lang,
@@ -157,15 +170,55 @@ class UtteranceCloner:
         cloned_speech = self.tts(reference_transcription, view=False, durations=duration, pitch=pitch, energy=energy,
                                  text_is_phonemes=input_is_phones)
         cloned_utt = torch.cat((start_sil, cloned_speech, end_sil), dim=0)
-        if clone_speaker_identity:
+        if clone_speaker_identity or speaker_embedding is not None:
             self.tts.default_utterance_embedding = prev_speaker_embedding.to(self.device)  # return to normal
         return cloned_utt
 
+    def biblical_accurate_angel_mode(self,
+                                     path_to_reference_audio,
+                                     reference_transcription,
+                                     filename_of_result,
+                                     list_of_speaker_references_for_ensemble,
+                                     lang="de"):
+        # list_of_speaker_references_for_ensemble can be a list of filepaths or a list of pre-extracted embeddings
+        prev_speaker_embedding = self.tts.default_utterance_embedding.clone().detach()
+
+        duration, pitch, energy, silence_frames_start, silence_frames_end = self.extract_prosody(reference_transcription,
+                                                                                                 path_to_reference_audio,
+                                                                                                 lang=lang)
+        self.tts.set_language(lang)
+        start_sil = torch.zeros([silence_frames_start * 3]).to(self.device)  # timestamps are from 16kHz, but now we're using 48kHz, so upsampling required
+        end_sil = torch.zeros([silence_frames_end * 3]).to(self.device)  # timestamps are from 16kHz, but now we're using 48kHz, so upsampling required
+        list_of_cloned_speeches = list()
+        if type(list_of_speaker_references_for_ensemble[0]) == str:
+            for path in list_of_speaker_references_for_ensemble:
+                self.tts.set_utterance_embedding(path_to_reference_audio=path)
+                list_of_cloned_speeches.append(self.tts(reference_transcription, view=False, durations=duration, pitch=pitch, energy=energy))
+        else:
+            for embed in list_of_speaker_references_for_ensemble:
+                self.tts.set_utterance_embedding(embedding=embed)
+                list_of_cloned_speeches.append(self.tts(reference_transcription, view=False, durations=duration, pitch=pitch, energy=energy))
+        cloned_speech = torch.stack(list_of_cloned_speeches).mean(dim=0)
+        cloned_utt = torch.cat((start_sil, cloned_speech, end_sil), dim=0)
+        sf.write(file=filename_of_result, data=cloned_utt.cpu().numpy(), samplerate=48000)
+        self.tts.default_utterance_embedding = prev_speaker_embedding.to(self.device)  # return to normal
+
 
 if __name__ == '__main__':
-    uc = UtteranceCloner(path_to_fastspeech_model="fill me with path", path_to_hifigan_model="fill me with path", path_to_aligner_model="fill me with path", device="cuda" if torch.cuda.is_available() else "cpu")
+    uc = UtteranceCloner(path_to_fastspeech_model="fill me with path",
+                         path_to_hifigan_model="fill me with path",
+                         path_to_aligner_model="fill me with path",
+                         path_to_embed_model="fill me with path",
+                         device="cpu")
 
     wav = uc.clone_utterance(path_to_reference_audio="audios/test.wav",
                              reference_transcription="Hello world, this is a test.",
                              clone_speaker_identity=False,
+                             speaker_embedding=None,  # speaker_embedding can be either a path to a reference audio or a pre-extracted embedding
                              lang="en")
+
+    uc.biblical_accurate_angel_mode(path_to_reference_audio="audios/test.wav",
+                                    reference_transcription="Hello world, this is a test.",
+                                    filename_of_result="audios/test_cloned_angelic.wav",
+                                    list_of_speaker_references_for_ensemble=["paths as strings or embeddings in torch.tensor can go here, but don't mix"],
+                                    lang="en")

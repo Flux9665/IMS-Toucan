@@ -3,7 +3,6 @@ Taken from ESPNet
 """
 
 import torch
-import torch.nn.functional as F
 
 from .Attention import RelPositionMultiHeadedAttention
 from .Convolution import ConvolutionModule
@@ -41,15 +40,15 @@ class Conformer(torch.nn.Module):
         selfattention_layer_type (str): Conformer attention layer type.
         activation_type (str): Conformer activation function type.
         use_cnn_module (bool): Whether to use convolution module.
-        cnn_module_kernel (int): Kernerl size of convolution module.
+        cnn_module_kernel (int): Kernel size of convolution module.
         padding_idx (int): Padding idx for input_layer=embed.
 
     """
 
     def __init__(self, idim, attention_dim=256, attention_heads=4, linear_units=2048, num_blocks=6, dropout_rate=0.1, positional_dropout_rate=0.1,
                  attention_dropout_rate=0.0, input_layer="conv2d", normalize_before=True, concat_after=False, positionwise_conv_kernel_size=1,
-                 macaron_style=False, use_cnn_module=False, cnn_module_kernel=31, zero_triu=False, utt_embed=None, connect_utt_emb_at_encoder_out=True,
-                 spk_emb_bottleneck_size=128, lang_embs=None):
+                 macaron_style=False, use_cnn_module=False, cnn_module_kernel=31, zero_triu=False, utt_embed=None,
+                 lang_embs=None):
         super(Conformer, self).__init__()
 
         activation = Swish()
@@ -65,13 +64,8 @@ class Conformer(torch.nn.Module):
             raise ValueError("unknown input_layer: " + input_layer)
 
         self.normalize_before = normalize_before
-
-        self.connect_utt_emb_at_encoder_out = connect_utt_emb_at_encoder_out
         if utt_embed is not None:
-            self.hs_emb_projection = torch.nn.Linear(attention_dim + spk_emb_bottleneck_size, attention_dim)
-            # embedding projection derived from https://arxiv.org/pdf/1705.08947.pdf
-            self.embedding_projection = torch.nn.Sequential(torch.nn.Linear(utt_embed, spk_emb_bottleneck_size),
-                                                            torch.nn.Softsign())
+            self.embedding_expansion = torch.nn.Linear(utt_embed, attention_dim)
         if lang_embs is not None:
             self.language_embedding = torch.nn.Embedding(num_embeddings=lang_embs, embedding_dim=attention_dim)
 
@@ -98,17 +92,14 @@ class Conformer(torch.nn.Module):
     def forward(self, xs, masks, utterance_embedding=None, lang_ids=None):
         """
         Encode input sequence.
-
         Args:
             utterance_embedding: embedding containing lots of conditioning signals
             step: indicator for when to start updating the embedding function
             xs (torch.Tensor): Input tensor (#batch, time, idim).
             masks (torch.Tensor): Mask tensor (#batch, time).
-
         Returns:
             torch.Tensor: Output tensor (#batch, time, attention_dim).
             torch.Tensor: Mask tensor (#batch, time).
-
         """
 
         if self.embed is not None:
@@ -117,9 +108,6 @@ class Conformer(torch.nn.Module):
         if lang_ids is not None:
             lang_embs = self.language_embedding(lang_ids)
             xs = xs + lang_embs  # offset the phoneme distribution of a language
-
-        if utterance_embedding is not None and not self.connect_utt_emb_at_encoder_out:
-            xs = self._integrate_with_utt_embed(xs, utterance_embedding)
 
         xs = self.pos_enc(xs)
 
@@ -130,15 +118,11 @@ class Conformer(torch.nn.Module):
         if self.normalize_before:
             xs = self.after_norm(xs)
 
-        if utterance_embedding is not None and self.connect_utt_emb_at_encoder_out:
-            xs = self._integrate_with_utt_embed(xs, utterance_embedding)
+        if utterance_embedding is not None:
+            xs = self._integrate_with_utt_embed_encoder(xs, utterance_embedding)
 
         return xs, masks
 
-    def _integrate_with_utt_embed(self, hs, utt_embeddings):
-        # project embedding into smaller space
-        speaker_embeddings_projected = self.embedding_projection(utt_embeddings)
-        # concat hidden states with spk embeds and then apply projection
-        speaker_embeddings_expanded = F.normalize(speaker_embeddings_projected).unsqueeze(1).expand(-1, hs.size(1), -1)
-        hs = self.hs_emb_projection(torch.cat([hs, speaker_embeddings_expanded], dim=-1))
-        return hs
+    def _integrate_with_utt_embed_encoder(self, hs, utt_embeddings):
+        expanded_embeddings = self.embedding_expansion(utt_embeddings).unsqueeze(1)
+        return hs + expanded_embeddings

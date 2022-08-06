@@ -157,7 +157,7 @@ class ArticulatoryCombinedTextFrontend:
             phones = text
         else:
             phones = self.get_phone_string(text=text, include_eos_symbol=True, for_feature_extraction=True)
-        phones = phones.replace("ɚ","ə").replace("ᵻ","ɨ")
+        phones = phones.replace("ɚ", "ə").replace("ᵻ", "ɨ")
         if view:
             print("Phonemes: \n{}\n".format(phones))
         phones_vector = list()
@@ -295,7 +295,7 @@ class ArticulatoryCombinedTextFrontend:
             (":", "~"),
             (";", "~"),
             (",", "~")  # make sure this remains the final one when adding new ones
-        ]
+            ]
         unsupported_ipa_characters = {'̹', '̙', '̞', '̯', '̤', '̪', '̩', '̠', '̟', 'ꜜ',
                                       '̃', '̬', '̽', 'ʰ', '|', '̝', '•', 'ˠ', '↘',
                                       '‖', '̰', '‿', 'ᷝ', '̈', 'ᷠ', '̜', 'ʷ', 'ʲ',
@@ -317,7 +317,7 @@ class ArticulatoryCombinedTextFrontend:
                 ("˩", ""),  # very low tone
                 ('\u030C', ""),  # rising tone
                 ('\u0302', "")  # falling tone
-            ]
+                ]
         for replacement in replacements:
             phones = phones.replace(replacement[0], replacement[1])
         phones = re.sub("~+", "~", phones)

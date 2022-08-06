@@ -10,21 +10,27 @@ import torch
 
 from ..InferenceInterfaces.InferenceArchitectures.InferenceFastSpeech2 import FastSpeech2
 from ..InferenceInterfaces.InferenceArchitectures.InferenceHiFiGAN import HiFiGANGenerator
-from ..Preprocessing.ProsodicConditionExtractor import ProsodicConditionExtractor
+from ..Preprocessing.AudioPreprocessor import AudioPreprocessor
 from ..Preprocessing.TextFrontend import ArticulatoryCombinedTextFrontend
 from ..Preprocessing.TextFrontend import get_language_id
+from ..TrainingInterfaces.Spectrogram_to_Embedding.StyleEmbedding import StyleEmbedding
 
 
 class AnonFastSpeech2(torch.nn.Module):
 
-    def __init__(self, path_to_hifigan_model, path_to_fastspeech_model, device="cpu", language="en", noise_reduce=False):
+    def __init__(self, path_to_hifigan_model, path_to_fastspeech_model, path_to_embed_model, device="cpu", language="en", noise_reduce=False):
         super().__init__()
         self.device = device
+        self.audio_preprocessor = AudioPreprocessor(input_sr=16000, output_sr=16000, cut_silence=True, device=self.device)
         self.text2phone = ArticulatoryCombinedTextFrontend(language=language, add_silence_to_end=True)
         checkpoint = torch.load(path_to_fastspeech_model, map_location='cpu')
         self.use_lang_id = False
         self.phone2mel = FastSpeech2(weights=checkpoint["model"]).to(torch.device(device))
         self.mel2wav = HiFiGANGenerator(path_to_weights=path_to_hifigan_model).to(torch.device(device))
+        self.style_embedding_function = StyleEmbedding()
+        check_dict = torch.load(path_to_embed_model, map_location="cpu")
+        self.style_embedding_function.load_state_dict(check_dict["style_emb_func"])
+        self.style_embedding_function.to(self.device)
         self.default_utterance_embedding = checkpoint["default_emb"].to(self.device)
         self.phone2mel.eval()
         self.mel2wav.eval()
@@ -38,16 +44,18 @@ class AnonFastSpeech2(torch.nn.Module):
             self.prototypical_noise = None
             self.update_noise_profile()
 
-    def set_utterance_embedding(self, path_to_reference_audio):
+    def set_utterance_embedding(self, path_to_reference_audio="", embedding=None):
+        if embedding is not None:
+            self.default_utterance_embedding = embedding.squeeze().to(self.device)
+            return
+        assert os.path.exists(path_to_reference_audio)
         wave, sr = soundfile.read(path_to_reference_audio)
-        self.default_utterance_embedding = ProsodicConditionExtractor(sr=sr).extract_condition_from_reference_wave(wave).to(self.device)
-        if self.noise_reduce:
-            self.update_noise_profile()
-
-    def update_noise_profile(self):
-        self.noise_reduce = False
-        self.prototypical_noise = self("~." * 100, input_is_phones=True).cpu().numpy()
-        self.noise_reduce = True
+        if sr != self.audio_preprocessor.sr:
+            self.audio_preprocessor = AudioPreprocessor(input_sr=sr, output_sr=16000, cut_silence=True, device=self.device)
+        spec = self.audio_preprocessor.audio_to_mel_spec_tensor(wave).transpose(0, 1)
+        spec_len = torch.LongTensor([len(spec)])
+        self.default_utterance_embedding = self.style_embedding_function(spec.unsqueeze(0).to(self.device),
+                                                                         spec_len.unsqueeze(0).to(self.device)).squeeze()
 
     def set_language(self, lang_id):
         """
