@@ -1,9 +1,9 @@
 import soundfile as sf
 import torch
 from torch.optim import SGD
+from .Preprocessing.AudioPreprocessor import AudioPreprocessor
 
 from .InferenceInterfaces.AnonFastSpeech2 import AnonFastSpeech2
-from .Preprocessing.AudioPreprocessor import AudioPreprocessor
 from .Preprocessing.TextFrontend import ArticulatoryCombinedTextFrontend
 from .TrainingInterfaces.Text_to_Spectrogram.AutoAligner.Aligner import Aligner
 from .TrainingInterfaces.Text_to_Spectrogram.FastSpeech2.DurationCalculator import DurationCalculator
@@ -13,9 +13,17 @@ from .TrainingInterfaces.Text_to_Spectrogram.FastSpeech2.PitchCalculator import 
 
 class UtteranceCloner:
 
-    def __init__(self, path_to_fastspeech_model, path_to_hifigan_model, path_to_aligner_model, path_to_embed_model, device):
-        self.tts = AnonFastSpeech2(device=device, path_to_fastspeech_model=path_to_fastspeech_model, path_to_hifigan_model=path_to_hifigan_model,
+    def __init__(self,
+                 path_to_fastspeech_model,
+                 path_to_hifigan_model,
+                 path_to_aligner_model,
+                 path_to_embed_model, device):
+        self.tts = AnonFastSpeech2(device=device,
+                                   path_to_fastspeech_model=path_to_fastspeech_model,
+                                   path_to_hifigan_model=path_to_hifigan_model,
                                    path_to_embed_model=path_to_embed_model)
+        self.ap = AudioPreprocessor(input_sr=16000, output_sr=16000, melspec_buckets=80, hop_length=256, n_fft=1024, cut_silence=False)
+        self.tf = ArticulatoryCombinedTextFrontend(language="en")
         self.device = device
         self.aligner_weights = torch.load(path_to_aligner_model, map_location='cpu')["asr_model"]
         torch.hub._validate_not_a_forked_repo = lambda a, b, c: True  # torch 1.9 has a bug in the hub loading, this is a workaround
@@ -32,11 +40,11 @@ class UtteranceCloner:
     def extract_prosody(self,
                         transcript,
                         ref_audio_path,
-                        lang="de",
+                        lang="en",
                         on_line_fine_tune=True,
                         input_is_phones=False,
-                        random_offset_lower=0,
-                        random_offset_higher=5):
+                        random_offset_lower=None,
+                        random_offset_higher=None):
         acoustic_model = Aligner()
         acoustic_model.load_state_dict(self.aligner_weights)
         acoustic_model = acoustic_model.to(self.device)
@@ -44,10 +52,12 @@ class UtteranceCloner:
         energy_calc = EnergyCalculator(reduction_factor=1, fs=16000)
         dc = DurationCalculator(reduction_factor=1)
         wave, sr = sf.read(ref_audio_path)
-        tf = ArticulatoryCombinedTextFrontend(language=lang)
-        ap = AudioPreprocessor(input_sr=sr, output_sr=16000, melspec_buckets=80, hop_length=256, n_fft=1024, cut_silence=False)
+        if self.tf.language != lang:
+            self.tf = ArticulatoryCombinedTextFrontend(language=lang)
+        if self.ap.sr != sr:
+            self.ap = AudioPreprocessor(input_sr=sr, output_sr=16000, melspec_buckets=80, hop_length=256, n_fft=1024, cut_silence=False)
         try:
-            norm_wave = ap.audio_to_wave_tensor(normalize=True, audio=wave)
+            norm_wave = self.ap.audio_to_wave_tensor(normalize=True, audio=wave)
         except ValueError:
             print('Something went wrong, the reference wave might be too short.')
             raise RuntimeError
@@ -59,8 +69,8 @@ class UtteranceCloner:
         norm_wave = norm_wave[speech_timestamps[0]['start']:speech_timestamps[-1]['end']]
 
         norm_wave_length = torch.LongTensor([len(norm_wave)])
-        text = tf.string_to_tensor(transcript, handle_missing=True, input_phonemes=input_is_phones).squeeze(0)
-        melspec = ap.audio_to_mel_spec_tensor(audio=norm_wave, normalize=False, explicit_sampling_rate=16000).transpose(0, 1)
+        text = self.tf.string_to_tensor(transcript, handle_missing=True, input_phonemes=input_is_phones).squeeze(0)
+        melspec = self.ap.audio_to_mel_spec_tensor(audio=norm_wave, normalize=False, explicit_sampling_rate=16000).transpose(0, 1)
         melspec_length = torch.LongTensor([len(melspec)]).numpy()
 
         if on_line_fine_tune:
@@ -69,15 +79,16 @@ class UtteranceCloner:
             tokens = list()  # we need an ID sequence for training rather than a sequence of phonological features
             for vector in text:
                 if vector[19] == 0:  # we don't include word boundaries when performing alignment, since they are not always present in audio.
-                    for phone in tf.phone_to_vector:
-                        if vector.numpy().tolist()[11:] == tf.phone_to_vector[phone][11:]:
-                            # the first 10 dimensions are for modifiers, so we ignore those when trying to find the phoneme in the ID lookup
-                            tokens.append(tf.phone_to_id[phone])
+                    for phone in self.tf.phone_to_vector:
+                        if vector.numpy().tolist()[11:-2] == self.tf.phone_to_vector[phone][11:-2]:
+                            # the first 10 and last 2 dimensions are for modifiers, so we ignore those when trying to find the phoneme in the ID lookup
+                            tokens.append(self.tf.phone_to_id[phone])
                             # this is terribly inefficient, but it's fine
                             break
             tokens = torch.LongTensor(tokens).squeeze().to(self.device)
             tokens_len = torch.LongTensor([len(tokens)]).to(self.device)
             mel = melspec.unsqueeze(0).to(self.device)
+            mel.requires_grad = True
             mel.requires_grad = True
             mel_len = torch.LongTensor([len(mel[0])]).to(self.device)
             # actual fine-tuning starts here
@@ -135,12 +146,19 @@ class UtteranceCloner:
                              text=text,
                              durations=duration.unsqueeze(0),
                              durations_lengths=torch.LongTensor([len(duration)]))[0].squeeze(0).cpu()
+        if random_offset_lower is not None and random_offset_higher is not None:
+            scales = torch.randint(low=random_offset_lower, high=random_offset_higher, size=energy.size()).float() / 100
+            energy = energy * scales
         pitch = parsel(input_waves=norm_wave.unsqueeze(0),
                        input_waves_lengths=norm_wave_length,
                        feats_lengths=melspec_length,
                        text=text,
                        durations=duration.unsqueeze(0),
                        durations_lengths=torch.LongTensor([len(duration)]))[0].squeeze(0).cpu()
+        if random_offset_lower is not None and random_offset_higher is not None:
+            scales = torch.randint(low=random_offset_lower, high=random_offset_higher, size=pitch.size()).float() / 100
+            pitch = pitch * scales
+
         return duration, pitch, energy, start_silence, end_silence
 
     def clone_utterance(self,
@@ -148,22 +166,27 @@ class UtteranceCloner:
                         reference_transcription,
                         clone_speaker_identity=True,
                         speaker_embedding=None,
-                        lang="de",
-                        input_is_phones=False):
+                        lang="en",
+                        input_is_phones=False,
+                        random_offset_lower=None,
+                        random_offset_higher=None):
         # speaker_embedding can be either a path to a reference audio or a pre-extracted embedding
         if clone_speaker_identity or speaker_embedding is not None:
             prev_speaker_embedding = self.tts.default_utterance_embedding.clone().detach()
             if clone_speaker_identity:
                 self.tts.set_utterance_embedding(path_to_reference_audio=path_to_reference_audio)
             elif type(speaker_embedding) == str:
-                self.tts.set_utterance_embedding(path_to_reference_audio=path_to_reference_audio)
+                self.tts.set_utterance_embedding(path_to_reference_audio=speaker_embedding)
             else:
-                self.tts.set_utterance_embedding(embedding=speaker_embedding)
+                # remaining case should be that it's already a tensor, but we don't explicitly check
+                self.tts.default_utterance_embedding = speaker_embedding.to(self.device)
 
         duration, pitch, energy, silence_frames_start, silence_frames_end = self.extract_prosody(reference_transcription,
                                                                                                  path_to_reference_audio,
                                                                                                  lang=lang,
-                                                                                                 input_is_phones=input_is_phones)
+                                                                                                 input_is_phones=input_is_phones,
+                                                                                                 random_offset_lower=random_offset_lower,
+                                                                                                 random_offset_higher=random_offset_higher)
         self.tts.set_language(lang)
         start_sil = torch.zeros([silence_frames_start * 3]).to(self.device)  # timestamps are from 16kHz, but now we're using 48kHz, so upsampling required
         end_sil = torch.zeros([silence_frames_end * 3]).to(self.device)  # timestamps are from 16kHz, but now we're using 48kHz, so upsampling required
@@ -177,9 +200,8 @@ class UtteranceCloner:
     def biblical_accurate_angel_mode(self,
                                      path_to_reference_audio,
                                      reference_transcription,
-                                     filename_of_result,
                                      list_of_speaker_references_for_ensemble,
-                                     lang="de"):
+                                     lang="en"):
         # list_of_speaker_references_for_ensemble can be a list of filepaths or a list of pre-extracted embeddings
         prev_speaker_embedding = self.tts.default_utterance_embedding.clone().detach()
 
@@ -200,25 +222,47 @@ class UtteranceCloner:
                 list_of_cloned_speeches.append(self.tts(reference_transcription, view=False, durations=duration, pitch=pitch, energy=energy))
         cloned_speech = torch.stack(list_of_cloned_speeches).mean(dim=0)
         cloned_utt = torch.cat((start_sil, cloned_speech, end_sil), dim=0)
-        sf.write(file=filename_of_result, data=cloned_utt.cpu().numpy(), samplerate=48000)
         self.tts.default_utterance_embedding = prev_speaker_embedding.to(self.device)  # return to normal
+        return cloned_utt
 
 
-if __name__ == '__main__':
-    uc = UtteranceCloner(path_to_fastspeech_model="fill me with path",
-                         path_to_hifigan_model="fill me with path",
-                         path_to_aligner_model="fill me with path",
-                         path_to_embed_model="fill me with path",
+def integration_test():
+    """
+    This has to be called from one directory higher up so that the relative imports work.
+
+    Exemplary calls for all features are included.
+    """
+    uc = UtteranceCloner(path_to_fastspeech_model="IMSToucan/Models/FastSpeech2_VP/best.pt",
+                         path_to_hifigan_model="IMSToucan/Models/HiFiGAN_combined/best.pt",
+                         path_to_aligner_model="IMSToucan/Models/Aligner/aligner.pt",
+                         path_to_embed_model="IMSToucan/Models/Embedding/embedding_function.pt",
                          device="cpu")
 
-    wav = uc.clone_utterance(path_to_reference_audio="audios/test.wav",
+    wav = uc.clone_utterance(path_to_reference_audio="IMSToucan/audios/test.wav",
                              reference_transcription="Hello world, this is a test.",
-                             clone_speaker_identity=False,
-                             speaker_embedding=None,  # speaker_embedding can be either a path to a reference audio or a pre-extracted embedding
+                             clone_speaker_identity=False,  # if True, clones the prosody of the sample AND the voice from the same sample. For
+                             # using a different voice, use next argument.
+                             speaker_embedding=None,
+                             # speaker_embedding can be either a path to a reference audio or a pre-extracted embedding
                              lang="en")
+    sf.write(file="IMSToucan/audios/integration_test_normal.wav", data=wav.cpu().numpy(), samplerate=48000)
 
-    uc.biblical_accurate_angel_mode(path_to_reference_audio="audios/test.wav",
-                                    reference_transcription="Hello world, this is a test.",
-                                    filename_of_result="audios/test_cloned_angelic.wav",
-                                    list_of_speaker_references_for_ensemble=["paths as strings or embeddings in torch.tensor can go here, but don't mix"],
-                                    lang="en")
+    wav = uc.clone_utterance(path_to_reference_audio="IMSToucan/audios/test.wav",
+                             reference_transcription="Hello world, this is a test.",
+                             clone_speaker_identity=False,  # if True, clones the prosody of the sample AND the voice from the same sample. For
+                             # using a different voice, use next argument.
+                             speaker_embedding=None,
+                             # speaker_embedding can be either a path to a reference audio or a pre-extracted embedding
+                             lang="en",
+                             random_offset_lower=50,  # corresponds to value * 0.5
+                             random_offset_higher=150)  # corresponds to value * 1.5
+    sf.write(file="IMSToucan/audios/integration_test_randomly_modded.wav", data=wav.cpu().numpy(), samplerate=48000)
+
+    wav = uc.biblical_accurate_angel_mode(path_to_reference_audio="IMSToucan/audios/test.wav",
+                                          reference_transcription="Hello world, this is a test.",
+                                          list_of_speaker_references_for_ensemble=["IMSToucan/audios/zischler.wav",
+                                                                                   "IMSToucan/audios/nadja_sample.wav",
+                                                                                   "IMSToucan/audios/test.wav"],  # paths as strings
+                                          # or embeddings in torch.tensor can go here, but don't mix
+                                          lang="en")
+    sf.write(file="IMSToucan/audios/integration_test_angelic.wav", data=wav.cpu().numpy(), samplerate=48000)

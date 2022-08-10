@@ -41,6 +41,8 @@ class AudioPreprocessor:
              self.read_audio,
              self.VADIterator,
              self.collect_chunks) = utils
+            torch.set_grad_enabled(True)  # finding this issue was very infuriating: silero sets
+            # this to false globally during model loading rather than using inference mode or no_grad
             self.silero_model = self.silero_model.to(self.device)
         if output_sr is not None and output_sr != input_sr:
             self.resample = Resample(orig_freq=input_sr, new_freq=output_sr).to(self.device)

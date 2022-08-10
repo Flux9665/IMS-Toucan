@@ -15,7 +15,7 @@ class FastSpeech2(torch.nn.Module, ABC):
 
     def __init__(self,  # network structure related
                  weights,
-                 idim=60,
+                 idim=62,
                  odim=80,
                  adim=384,
                  aheads=4,
@@ -69,8 +69,7 @@ class FastSpeech2(torch.nn.Module, ABC):
                  duration_predictor_dropout_rate=0.2,
                  postnet_dropout_rate=0.5,
                  # additional features
-                 utt_embed_dim=704,
-                 connect_utt_emb_at_encoder_out=True,
+                 utt_embed_dim=128,
                  lang_embs=None):
         super().__init__()
         self.idim = idim
@@ -79,6 +78,9 @@ class FastSpeech2(torch.nn.Module, ABC):
         self.stop_gradient_from_pitch_predictor = stop_gradient_from_pitch_predictor
         self.stop_gradient_from_energy_predictor = stop_gradient_from_energy_predictor
         self.use_scaled_pos_enc = use_scaled_pos_enc
+        self.multilingual_model = lang_embs is not None
+        self.multispeaker_model = utt_embed_dim is not None
+
         embed = torch.nn.Sequential(torch.nn.Linear(idim, 100),
                                     torch.nn.Tanh(),
                                     torch.nn.Linear(100, adim))
@@ -88,7 +90,7 @@ class FastSpeech2(torch.nn.Module, ABC):
                                  normalize_before=encoder_normalize_before, concat_after=encoder_concat_after,
                                  positionwise_conv_kernel_size=positionwise_conv_kernel_size, macaron_style=use_macaron_style_in_conformer,
                                  use_cnn_module=use_cnn_in_conformer, cnn_module_kernel=conformer_enc_kernel_size, zero_triu=False,
-                                 utt_embed=utt_embed_dim, connect_utt_emb_at_encoder_out=connect_utt_emb_at_encoder_out, lang_embs=lang_embs)
+                                 utt_embed=utt_embed_dim, lang_embs=lang_embs)
         self.duration_predictor = DurationPredictor(idim=adim, n_layers=duration_predictor_layers,
                                                     n_chans=duration_predictor_chans,
                                                     kernel_size=duration_predictor_kernel_size,
@@ -124,7 +126,8 @@ class FastSpeech2(torch.nn.Module, ABC):
                                  positionwise_conv_kernel_size=positionwise_conv_kernel_size,
                                  macaron_style=use_macaron_style_in_conformer,
                                  use_cnn_module=use_cnn_in_conformer,
-                                 cnn_module_kernel=conformer_dec_kernel_size)
+                                 cnn_module_kernel=conformer_dec_kernel_size,
+                                 utt_embed=utt_embed_dim)
         self.feat_out = torch.nn.Linear(adim, odim * reduction_factor)
         self.postnet = PostNet(idim=idim,
                                odim=odim,
@@ -137,7 +140,15 @@ class FastSpeech2(torch.nn.Module, ABC):
 
     def _forward(self, text_tensors, text_lens, gold_speech=None, speech_lens=None,
                  gold_durations=None, gold_pitch=None, gold_energy=None,
-                 is_inference=False, alpha=1.0, utterance_embedding=None, lang_ids=None):
+                 is_inference=False, duration_scaling_factor=1.0, utterance_embedding=None, lang_ids=None,
+                 pitch_variance_scale=1.0, energy_variance_scale=1.0):
+
+        if not self.multilingual_model:
+            lang_ids = None
+
+        if not self.multispeaker_model:
+            utterance_embedding = None
+
         # forward encoder
         text_masks = self._source_mask(text_lens)
 
@@ -165,14 +176,29 @@ class FastSpeech2(torch.nn.Module, ABC):
                 pitch_predictions = gold_pitch
             if gold_energy is not None:
                 energy_predictions = gold_energy
+
+            for phoneme_index, phoneme_vector in enumerate(text_tensors.squeeze(0)):
+                if phoneme_vector[59] == 0:
+                    pitch_predictions[0][phoneme_index] = 0.0
+                    energy_predictions[0][phoneme_index] = 0.0
+            pitch_predictions = _scale_variance(pitch_predictions, pitch_variance_scale)
+            energy_predictions = _scale_variance(energy_predictions, energy_variance_scale)
+
             pitch_embeddings = self.pitch_embed(pitch_predictions.transpose(1, 2)).transpose(1, 2)
             energy_embeddings = self.energy_embed(energy_predictions.transpose(1, 2)).transpose(1, 2)
             encoded_texts = encoded_texts + energy_embeddings + pitch_embeddings
-            encoded_texts = self.length_regulator(encoded_texts, duration_predictions, alpha)
+            encoded_texts = self.length_regulator(encoded_texts, duration_predictions, duration_scaling_factor)
         else:
             duration_predictions = self.duration_predictor(encoded_texts, duration_masks)
 
-            # use groundtruth in training
+            for phoneme_index, phoneme_vector in enumerate(text_tensors):
+                if phoneme_vector[59] == 0:
+                    pitch_predictions[phoneme_index] = 0.0
+                    energy_predictions[phoneme_index] = 0.0
+            pitch_predictions = _scale_variance(pitch_predictions, pitch_variance_scale)
+            energy_predictions = _scale_variance(energy_predictions, energy_variance_scale)
+
+            # use groundtruth to clone
             pitch_embeddings = self.pitch_embed(gold_pitch.transpose(1, 2)).transpose(1, 2)
             energy_embeddings = self.energy_embed(gold_energy.transpose(1, 2)).transpose(1, 2)
             encoded_texts = encoded_texts + energy_embeddings + pitch_embeddings
@@ -187,7 +213,7 @@ class FastSpeech2(torch.nn.Module, ABC):
             h_masks = self._source_mask(olens_in)
         else:
             h_masks = None
-        zs, _ = self.decoder(encoded_texts, h_masks)  # (B, Lmax, adim)
+        zs, _ = self.decoder(encoded_texts, h_masks, utterance_embedding=utterance_embedding)  # (B, Lmax, adim)
         before_outs = self.feat_out(zs).view(zs.size(0), -1, self.odim)  # (B, Lmax, odim)
 
         # postnet -> (B, Lmax//r * r, odim)
@@ -204,21 +230,34 @@ class FastSpeech2(torch.nn.Module, ABC):
                 energy=None,
                 utterance_embedding=None,
                 return_duration_pitch_energy=False,
-                lang_id=None):
+                lang_id=None,
+                duration_scaling_factor=1.0,
+                pitch_variance_scale=1.0,
+                energy_variance_scale=1.0):
         """
-        Generate the sequence of features given the sequences of characters.
+        Generate the sequence of spectrogram frames given the sequence of vectorized phonemes.
 
         Args:
-            text: Input sequence of characters
-            speech: Feature sequence to extract style
-            durations: Groundtruth of duration
-            pitch: Groundtruth of token-averaged pitch
-            energy: Groundtruth of token-averaged energy
+            text: input sequence of vectorized phonemes
+            speech: feature sequence to extract style from (not used for now, placeholder for future plans)
+            durations: durations to be used (optional, if not provided, they will be predicted)
+            pitch: token-averaged pitch curve to be used (optional, if not provided, it will be predicted)
+            energy: token-averaged energy curve to be used (optional, if not provided, it will be predicted)
             return_duration_pitch_energy: whether to return the list of predicted durations for nicer plotting
-            utterance_embedding: embedding of utterance wide parameters
+            utterance_embedding: embedding of speaker information
+            lang_id: id to be fed into the embedding layer that contains language information
+            duration_scaling_factor: reasonable values are 0.8 < scale < 1.2.
+                                     1.0 means no scaling happens, higher values increase durations for the whole
+                                     utterance, lower values decrease durations for the whole utterance.
+            pitch_variance_scale: reasonable values are 0.6 < scale < 1.4.
+                                  1.0 means no scaling happens, higher values increase variance of the pitch curve,
+                                  lower values decrease variance of the pitch curve.
+            energy_variance_scale: reasonable values are 0.6 < scale < 1.4.
+                                   1.0 means no scaling happens, higher values increase variance of the energy curve,
+                                   lower values decrease variance of the energy curve.
 
         Returns:
-            Mel Spectrogram
+            mel spectrogram
 
         """
         self.eval()
@@ -245,7 +284,10 @@ class FastSpeech2(torch.nn.Module, ABC):
                                                                                                gold_pitch=pitch,
                                                                                                gold_energy=energy,
                                                                                                utterance_embedding=utterance_embedding.unsqueeze(0),
-                                                                                               lang_ids=lang_id)
+                                                                                               lang_ids=lang_id,
+                                                                                               duration_scaling_factor=duration_scaling_factor,
+                                                                                               pitch_variance_scale=pitch_variance_scale,
+                                                                                               energy_variance_scale=energy_variance_scale)
         self.train()
         if return_duration_pitch_energy:
             return after_outs[0], d_outs[0], pitch_predictions[0], energy_predictions[0]
@@ -254,3 +296,16 @@ class FastSpeech2(torch.nn.Module, ABC):
     def _source_mask(self, ilens):
         x_masks = make_non_pad_mask(ilens).to(next(self.parameters()).device)
         return x_masks.unsqueeze(-2)
+
+
+def _scale_variance(sequence, scale):
+    if scale == 1.0:
+        return sequence
+    average = sequence[0][sequence[0] != 0.0].mean()
+    sequence = sequence - average  # center sequence around 0
+    sequence = sequence * scale  # scale the variance
+    sequence = sequence + average  # move center back to original with changed variance
+    for sequence_index in range(len(sequence[0])):
+        if sequence[0][sequence_index] < 0.0:
+            sequence[0][sequence_index] = 0.0
+    return sequence

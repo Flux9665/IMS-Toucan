@@ -106,7 +106,7 @@ class AnonFastSpeech2(torch.nn.Module):
             mel = mel.transpose(0, 1)
             wave = self.mel2wav(mel)
         if view:
-            from Utility.utils import cumsum_durations
+            from ..Utility.utils import cumsum_durations
             fig, ax = plt.subplots(nrows=2, ncols=1)
             ax[0].plot(wave.cpu().numpy())
             lbd.specshow(mel.cpu().numpy(),

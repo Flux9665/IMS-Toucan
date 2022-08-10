@@ -8,8 +8,8 @@ import torch
 from phonemizer.backend import EspeakBackend
 from pypinyin import pinyin
 
-from ..Preprocessing.articulatory_features import generate_feature_table
-from ..Preprocessing.articulatory_features import get_phone_to_id
+from .articulatory_features import generate_feature_table
+from .articulatory_features import get_phone_to_id
 
 
 class ArticulatoryCombinedTextFrontend:
@@ -19,15 +19,40 @@ class ArticulatoryCombinedTextFrontend:
                  use_explicit_eos=True,
                  use_lexical_stress=True,
                  silent=True,
-                 allow_unknown=False,
-                 add_silence_to_end=True):
+                 add_silence_to_end=True,
+                 use_word_boundaries=True):
         """
         Mostly preparing ID lookups
         """
-        self.allow_unknown = allow_unknown
+        self.language = language
         self.use_explicit_eos = use_explicit_eos
         self.use_stress = use_lexical_stress
         self.add_silence_to_end = add_silence_to_end
+        self.use_word_boundaries = use_word_boundaries
+
+        register_to_height = {
+            "˥": 5,
+            "˦": 4,
+            "˧": 3,
+            "˨": 2,
+            "˩": 1
+            }
+        self.rising_perms = list()
+        self.falling_perms = list()
+        self.peaking_perms = list()
+        self.dipping_perms = list()
+
+        for first_tone in ["˥", "˦", "˧", "˨", "˩"]:
+            for second_tone in ["˥", "˦", "˧", "˨", "˩"]:
+                if register_to_height[first_tone] > register_to_height[second_tone]:
+                    self.falling_perms.append(first_tone + second_tone)
+                else:
+                    self.rising_perms.append(first_tone + second_tone)
+                for third_tone in ["˥", "˦", "˧", "˨", "˩"]:
+                    if register_to_height[first_tone] > register_to_height[second_tone] < register_to_height[third_tone]:
+                        self.dipping_perms.append(first_tone + second_tone + third_tone)
+                    elif register_to_height[first_tone] < register_to_height[second_tone] > register_to_height[third_tone]:
+                        self.peaking_perms.append(first_tone + second_tone + third_tone)
 
         if language == "en":
             self.g2p_lang = "en-us"
@@ -125,12 +150,6 @@ class ArticulatoryCombinedTextFrontend:
             if not silent:
                 print("Created a Farsi Text-Frontend")
 
-        elif language == "chr":
-            self.g2p_lang = "chr"
-            self.expand_abbreviations = lambda x: x
-            if not silent:
-                print("Created a Cherokee Text-Frontend")
-
         # remember to also update get_language_id() below when adding something here
 
         else:
@@ -165,50 +184,47 @@ class ArticulatoryCombinedTextFrontend:
         stressed_flag = False
 
         for char in phones:
+            # affects following phoneme -----------------
             if char == '\u02C8':
                 # primary stress
-                # affects following phoneme
                 stressed_flag = True
+            # affects previous phoneme -----------------
             elif char == '\u02D0':
                 # lengthened
-                # affects previous phoneme
                 phones_vector[-1][8] = 1
             elif char == '\u02D1':
                 # half length
-                # affects previous phoneme
                 phones_vector[-1][9] = 1
             elif char == '\u0306':
                 # shortened
-                # affects previous phoneme
                 phones_vector[-1][10] = 1
             elif char == "˥":
                 # very high tone
-                # affects previous phoneme
                 phones_vector[-1][1] = 1
             elif char == "˦":
                 # high tone
-                # affects previous phoneme
                 phones_vector[-1][2] = 1
             elif char == "˧":
                 # mid tone
-                # affects previous phoneme
                 phones_vector[-1][3] = 1
             elif char == "˨":
                 # low tone
-                # affects previous phoneme
                 phones_vector[-1][4] = 1
             elif char == "˩":
                 # very low tone
-                # affects previous phoneme
                 phones_vector[-1][5] = 1
-            elif char == '\u030C':
+            elif char == "⭧":
                 # rising tone
-                # affects previous phoneme
                 phones_vector[-1][6] = 1
-            elif char == '\u0302':
+            elif char == "⭨":
                 # falling tone
-                # affects previous phoneme
                 phones_vector[-1][7] = 1
+            elif char == "⮁":
+                # peaking tone
+                phones_vector[-1][60] = 1
+            elif char == "⮃":
+                # dipping tone
+                phones_vector[-1][61] = 1
             else:
                 if handle_missing:
                     try:
@@ -228,7 +244,7 @@ class ArticulatoryCombinedTextFrontend:
         # expand abbreviations
         utt = self.expand_abbreviations(text)
         # phonemize
-        phones = self.phonemizer_backend.phonemize([utt], strip=True)[0]
+        phones = self.phonemizer_backend.phonemize([utt], strip=True)[0]  # To use a different phonemizer, this is the only line that needs to be exchanged
 
         # Unfortunately tonal languages don't agree on the tone, most tonal
         # languages use different tones denoted by different numbering
@@ -237,21 +253,28 @@ class ArticulatoryCombinedTextFrontend:
         if self.g2p_lang == "cmn-latn-pinyin" or self.g2p_lang == "cmn":
             phones = phones.replace(".", "")  # no idea why espeak puts dots everywhere for Chinese
             phones = phones.replace('1', "˥")
-            phones = phones.replace('2', "˧\u030C")
-            phones = phones.replace('ɜ', "˨\u0302\u030C")  # I'm fairly certain that this is a bug in espeak and ɜ is meant to be 3
-            phones = phones.replace('3', "˨\u0302\u030C")  # I'm fairly certain that this is a bug in espeak and ɜ is meant to be 3
-            phones = phones.replace('4', "˦\u0302")
+            phones = phones.replace('2', "˧˥")
+            phones = phones.replace('ɜ', "˨˩")  # I'm fairly certain that this is a bug in espeak and ɜ is meant to be 3
+            phones = phones.replace('3', "˨˩")  # I'm fairly certain that this is a bug in espeak and ɜ is meant to be 3
+            phones = phones.replace('4', "˦˩")
             phones = phones.replace('5', "˧")
             phones = phones.replace('0', "˧")
         if self.g2p_lang == "vi":
             phones = phones.replace('1', "˧")
-            phones = phones.replace('2', "˩\u0302")
-            phones = phones.replace('ɜ', "˧\u030C")  # I'm fairly certain that this is a bug in espeak and ɜ is meant to be 3
-            phones = phones.replace('3', "˧\u030C")  # I'm fairly certain that this is a bug in espeak and ɜ is meant to be 3
-            phones = phones.replace('4', "˧\u0302\u030C")
-            phones = phones.replace('5', "˧\u030C")
-            phones = phones.replace('6', "˧\u0302")
+            phones = phones.replace('2', "˨˩")
+            phones = phones.replace('ɜ', "˧˥")  # I'm fairly certain that this is a bug in espeak and ɜ is meant to be 3
+            phones = phones.replace('3', "˧˥")  # I'm fairly certain that this is a bug in espeak and ɜ is meant to be 3
+            phones = phones.replace('4', "˦˧˥")
+            phones = phones.replace('5', "˧˩˧")
+            phones = phones.replace('6', "˧˩ʔ˨")  # very weird tone, because the tone introduces another phoneme
             phones = phones.replace('7', "˧")
+
+        return self.postprocess_phoneme_string(phones, for_feature_extraction, include_eos_symbol, for_plot_labels)
+
+    def postprocess_phoneme_string(self, phoneme_string, for_feature_extraction, include_eos_symbol, for_plot_labels):
+        """
+        Takes as input a phoneme string and processes it to work best with the way we represent phonemes as featurevectors
+        """
         replacements = [
             # punctuation in languages with non-latin script
             ("。", "."),
@@ -287,6 +310,13 @@ class ArticulatoryCombinedTextFrontend:
             ('\u0304', "˧"),
             ('\u0300', "˨"),
             ('\u030F', "˩"),
+            ('\u0302', "⭨"),
+            ('\u030C', "⭧"),
+            ("꜖", "˩"),
+            ("꜕", "˨"),
+            ("꜔", "˧"),
+            ("꜓", "˦"),
+            ("꜒", "˥"),
             # symbols that indicate a pause or silence
             ('"', "~"),
             ("-", "~"),
@@ -316,25 +346,44 @@ class ArticulatoryCombinedTextFrontend:
                 ("˨", ""),  # low tone
                 ("˩", ""),  # very low tone
                 ('\u030C', ""),  # rising tone
-                ('\u0302', "")  # falling tone
+                ('\u0302', ""),  # falling tone
+                ('⭧', ""),  # rising
+                ('⭨', ""),  # falling
+                ('⮃', ""),  # dipping
+                ('⮁', ""),  # peaking
                 ]
         for replacement in replacements:
-            phones = phones.replace(replacement[0], replacement[1])
-        phones = re.sub("~+", "~", phones)
+            phoneme_string = phoneme_string.replace(replacement[0], replacement[1])
+        phones = re.sub("~+", "~", phoneme_string)
         phones = re.sub(r"\s+", " ", phones)
         phones = re.sub(r"\.+", ".", phones)
         phones = phones.lstrip("~").rstrip("~")
+
+        # peaking tones
+        for peaking_perm in self.peaking_perms:
+            phones = phones.replace(peaking_perm, "⮁".join(peaking_perm))
+        # dipping tones
+        for dipping_perm in self.dipping_perms:
+            phones = phones.replace(dipping_perm, "⮃".join(dipping_perm))
+        # rising tones
+        for rising_perm in self.rising_perms:
+            phones = phones.replace(rising_perm, "⭧".join(rising_perm))
+        # falling tones
+        for falling_perm in self.falling_perms:
+            phones = phones.replace(falling_perm, "⭨".join(falling_perm))
 
         if self.add_silence_to_end:
             phones += "~"  # adding a silence in the end during inference produces more natural sounding prosody
         if include_eos_symbol:
             phones += "#"
-
+        if not self.use_word_boundaries:
+            phones = phones.replace(" ", "")
         if for_plot_labels:
             phones = phones.replace(" ", "|")
 
         phones = "~" + phones
         phones = re.sub("~+", "~", phones)
+
         return phones
 
 
@@ -395,5 +444,20 @@ def get_language_id(language):
         return torch.LongTensor([15])
     elif language == "fa":
         return torch.LongTensor([16])
-    elif language == "chr":
-        return torch.LongTensor([17])
+
+
+if __name__ == '__main__':
+    tf = ArticulatoryCombinedTextFrontend(language="en")
+    tf.string_to_tensor("This is a complex sentence, it even has a pause! But can it do this? Nice.", view=True)
+
+    tf = ArticulatoryCombinedTextFrontend(language="de")
+    tf.string_to_tensor("Alles klar, jetzt testen wir einen deutschen Satz. Ich hoffe es gibt nicht mehr viele unspezifizierte Phoneme.", view=True)
+
+    tf = ArticulatoryCombinedTextFrontend(language="cmn")
+    tf.string_to_tensor("这是一个复杂的句子，它甚至包含一个停顿。", view=True)
+    tf.string_to_tensor("李绅 《悯农》    锄禾日当午，    汗滴禾下土。    谁知盘中餐，    粒粒皆辛苦。", view=True)
+    tf.string_to_tensor("巴	拔	把	爸	吧", view=True)
+
+    tf = ArticulatoryCombinedTextFrontend(language="vi")
+    tf.string_to_tensor("Xin chào thế giới, quả là một ngày tốt lành để học nói tiếng Việt!", view=True)
+    tf.string_to_tensor("ba bà bá bạ bả bã", view=True)
