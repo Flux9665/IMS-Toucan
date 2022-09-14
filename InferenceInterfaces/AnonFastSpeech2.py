@@ -24,8 +24,13 @@ class AnonFastSpeech2(torch.nn.Module):
         self.audio_preprocessor = AudioPreprocessor(input_sr=16000, output_sr=16000, cut_silence=True, device=self.device)
         self.text2phone = ArticulatoryCombinedTextFrontend(language=language, add_silence_to_end=True)
         checkpoint = torch.load(path_to_fastspeech_model, map_location='cpu')
-        self.use_lang_id = False
-        self.phone2mel = FastSpeech2(weights=checkpoint["model"]).to(torch.device(device))
+        try:
+            self.use_lang_id = False
+            self.phone2mel = FastSpeech2(weights=checkpoint["model"]).to(torch.device(device))
+        except RuntimeError:
+            print("Loading a multilingual model, which is strange for this purpose. Please double check that the correct model is being loaded.")
+            self.use_lang_id = True
+            self.phone2mel = FastSpeech2(weights=checkpoint["model"], lang_embs=100).to(torch.device(device))
         self.mel2wav = HiFiGANGenerator(path_to_weights=path_to_hifigan_model).to(torch.device(device))
         self.style_embedding_function = StyleEmbedding()
         check_dict = torch.load(path_to_embed_model, map_location="cpu")
