@@ -80,7 +80,7 @@ class UtteranceCloner:
             for vector in text:
                 if vector[21] == 0:  # we don't include word boundaries when performing alignment, since they are not always present in audio.
                     for phone in self.tf.phone_to_vector:
-                        if vector.numpy().tolist()[13] == self.tf.phone_to_vector[phone][13]:
+                        if vector.numpy().tolist()[13:] == self.tf.phone_to_vector[phone][13:]:
                             # the first 12 dimensions are for modifiers, so we ignore those when trying to find the phoneme in the ID lookup
                             tokens.append(self.tf.phone_to_id[phone])
                             # this is terribly inefficient, but it's fine
@@ -88,7 +88,6 @@ class UtteranceCloner:
             tokens = torch.LongTensor(tokens).squeeze().to(self.device)
             tokens_len = torch.LongTensor([len(tokens)]).to(self.device)
             mel = melspec.unsqueeze(0).to(self.device)
-            mel.requires_grad = True
             mel.requires_grad = True
             mel_len = torch.LongTensor([len(mel[0])]).to(self.device)
             # actual fine-tuning starts here
@@ -147,6 +146,7 @@ class UtteranceCloner:
                              durations=duration.unsqueeze(0),
                              durations_lengths=torch.LongTensor([len(duration)]))[0].squeeze(0).cpu()
         if random_offset_lower is not None and random_offset_higher is not None:
+            #print(f'use random offset lower of {random_offset_lower}')
             scales = torch.randint(low=random_offset_lower, high=random_offset_higher, size=energy.size()).float() / 100
             energy = energy * scales
         pitch = parsel(input_waves=norm_wave.unsqueeze(0),
@@ -156,6 +156,7 @@ class UtteranceCloner:
                        durations=duration.unsqueeze(0),
                        durations_lengths=torch.LongTensor([len(duration)]))[0].squeeze(0).cpu()
         if random_offset_lower is not None and random_offset_higher is not None:
+            #print(f'use random offset higher of {random_offset_higher}')
             scales = torch.randint(low=random_offset_lower, high=random_offset_higher, size=pitch.size()).float() / 100
             pitch = pitch * scales
 
@@ -179,6 +180,7 @@ class UtteranceCloner:
                 self.tts.set_utterance_embedding(path_to_reference_audio=speaker_embedding)
             else:
                 # remaining case should be that it's already a tensor, but we don't explicitly check
+                #print('use given speaker embedding')
                 self.tts.default_utterance_embedding = speaker_embedding.to(self.device)
 
         duration, pitch, energy, silence_frames_start, silence_frames_end = self.extract_prosody(reference_transcription,
@@ -201,13 +203,19 @@ class UtteranceCloner:
                                      path_to_reference_audio,
                                      reference_transcription,
                                      list_of_speaker_references_for_ensemble,
-                                     lang="en"):
+                                     lang="en",
+                                     input_is_phones=False,
+                                     random_offset_lower=None,
+                                     random_offset_higher=None):
         # list_of_speaker_references_for_ensemble can be a list of filepaths or a list of pre-extracted embeddings
         prev_speaker_embedding = self.tts.default_utterance_embedding.clone().detach()
 
         duration, pitch, energy, silence_frames_start, silence_frames_end = self.extract_prosody(reference_transcription,
                                                                                                  path_to_reference_audio,
-                                                                                                 lang=lang)
+                                                                                                 lang=lang,
+                                                                                                 input_is_phones=input_is_phones,
+                                                                                                 random_offset_lower=random_offset_lower,
+                                                                                                 random_offset_higher=random_offset_higher)
         self.tts.set_language(lang)
         start_sil = torch.zeros([silence_frames_start * 3]).to(self.device)  # timestamps are from 16kHz, but now we're using 48kHz, so upsampling required
         end_sil = torch.zeros([silence_frames_end * 3]).to(self.device)  # timestamps are from 16kHz, but now we're using 48kHz, so upsampling required
@@ -215,11 +223,13 @@ class UtteranceCloner:
         if type(list_of_speaker_references_for_ensemble[0]) == str:
             for path in list_of_speaker_references_for_ensemble:
                 self.tts.set_utterance_embedding(path_to_reference_audio=path)
-                list_of_cloned_speeches.append(self.tts(reference_transcription, view=False, durations=duration, pitch=pitch, energy=energy))
+                list_of_cloned_speeches.append(self.tts(reference_transcription, view=False, durations=duration,
+                                                        pitch=pitch, energy=energy, text_is_phonemes=input_is_phones))
         else:
             for embed in list_of_speaker_references_for_ensemble:
                 self.tts.set_utterance_embedding(embedding=embed)
-                list_of_cloned_speeches.append(self.tts(reference_transcription, view=False, durations=duration, pitch=pitch, energy=energy))
+                list_of_cloned_speeches.append(self.tts(reference_transcription, view=False, durations=duration,
+                                                        pitch=pitch, energy=energy, text_is_phonemes=input_is_phones))
         cloned_speech = torch.stack(list_of_cloned_speeches).mean(dim=0)
         cloned_utt = torch.cat((start_sil, cloned_speech, end_sil), dim=0)
         self.tts.default_utterance_embedding = prev_speaker_embedding.to(self.device)  # return to normal
